@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Poker LAN</title>
+  <link rel="stylesheet" href="style.css?v=1.1.4">
+</head>
+<body>
+
+  <!-- TOP BAR: Timer + Help -->
+  <div class="top-bar">
+    <div id="global-timer" class="global-timer" style="display:none">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <circle class="gt-ring-bg" cx="18" cy="18" r="15"/>
+        <circle class="gt-ring-fg" id="gt-ring-fg" cx="18" cy="18" r="15"
+          stroke-dasharray="94.25" stroke-dashoffset="0"/>
+      </svg>
+      <span class="gt-text" id="gt-text">30</span>
+    </div>
+    <button class="btn-help" onclick="toggleHelp()">?</button>
+  </div>
+
+  <!-- HELP OVERLAY -->
+  <div id="help-overlay" class="help-overlay" style="display:none">
+    <div class="help-content">
+      <button class="help-close" onclick="toggleHelp()">&times;</button>
+      <h2>Huong Dan Choi Poker</h2>
+      <div class="help-body">
+
+        <h3>Texas Hold'em la gi?</h3>
+        <p>Moi nguoi choi duoc chia <b>2 la bai rieng</b>. Ket hop voi <b>5 la bai chung</b> tren ban de tao ra <b>to hop 5 la manh nhat</b>.</p>
+        <div class="help-illustration">
+          <div class="help-ill-row">
+            <span class="help-label">Bai rieng:</span>
+            <div class="h-card red">A&hearts;</div>
+            <div class="h-card black">K&spades;</div>
+            <span class="help-label">+</span>
+            <span class="help-label">Bai chung:</span>
+            <div class="h-card red">Q&hearts;</div>
+            <div class="h-card red">J&diams;</div>
+            <div class="h-card red">10&hearts;</div>
+            <div class="h-card black">5&clubs;</div>
+            <div class="h-card black">2&spades;</div>
+          </div>
+        </div>
+
+        <h3>Trinh tu van choi</h3>
+        <div class="help-flow">
+          <div class="flow-step">
+            <div class="flow-icon">1</div>
+            <div class="flow-text"><b>Preflop</b><br>Chia 2 la bai, dat cuoc</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-step">
+            <div class="flow-icon">2</div>
+            <div class="flow-text"><b>Flop</b><br>Lat 3 la chung</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-step">
+            <div class="flow-icon">3</div>
+            <div class="flow-text"><b>Turn</b><br>Lat la thu 4</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-step">
+            <div class="flow-icon">4</div>
+            <div class="flow-text"><b>River</b><br>Lat la thu 5</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-step">
+            <div class="flow-icon">5</div>
+            <div class="flow-text"><b>Showdown</b><br>So bai, ai manh thang</div>
+          </div>
+        </div>
+
+        <h3>Cac hanh dong</h3>
+        <div class="help-actions-list">
+          <div class="help-action-item"><span class="ha-btn ha-check">Check</span> Bo luot (khi khong can goi)</div>
+          <div class="help-action-item"><span class="ha-btn ha-call">Call</span> Goi theo muc cuoc hien tai</div>
+          <div class="help-action-item"><span class="ha-btn ha-raise">Raise</span> Tang muc cuoc</div>
+          <div class="help-action-item"><span class="ha-btn ha-fold">Fold</span> Bo bai, khong choi tiep</div>
+          <div class="help-action-item"><span class="ha-btn ha-allin">All-In</span> Dat het tat ca chips</div>
+        </div>
+
+        <h3>Bang xep hang tay bai (manh &rarr; yeu)</h3>
+        <div class="hand-ranks">
+
+          <div class="hand-rank">
+            <div class="hand-rank-header"><span class="hand-rank-name">1. Royal Flush</span><span class="hand-rank-odds">0.000154%</span></div>
+            <div class="hand-rank-desc">Sanh cao nhat cung chat</div>
+            <div class="hand-rank-cards">
+              <div class="h-card red">A&hearts;</div>
+              <div class="h-card red">K&hearts;</div>
+              <div class="h-card red">Q&hearts;</div>
+              <div class="h-card red">J&hearts;</div>
+              <div class="h-card red">10&hearts;</div>
+            </div>
+          </div>
+
+          <div class="hand-rank">
+            <div class="hand-rank-header"><span class="hand-rank-name">2. Straight Flush</span><span class="hand-rank-odds">0.00139%</span></div>
+            <div class="hand-rank-desc">Sanh cung chat</div>
+            <div class="hand-rank-cards">
+              <div class="h-card black">9&spades;</div>
+              <div class="h-card black">8&spades;</div>
+              <div class="h-card black">7&spades;</div>
+              <div class="h-card black">6&spades;</div>
+              <div class="h-card black">5&spades;</div>
+            </div>
+          </div>
+
+          <div class="hand-rank">
+            <div class="hand-rank-header"><span class="hand-rank-name">3. Four of a Kind</span><span class="hand-rank-odds">0.024%</span></div>
+            <div class="hand-rank-desc">Tu quy (4 la cung so)</div>
+            <div class="hand-rank-cards">
+              <div class="h-card red">K&hearts;</div>
+              <div class="h-card red">K&diams;</div>
+              <div class="h-card black">K&clubs;</div>
+              <div class="h-card black">K&spades;</div>
+              <div class="h-card red">3&diams;</div>
+            </div>
+          </div>
+
+          <div class="hand-rank">
+            <div class="hand-rank-header"><span class="hand-rank-name">4. Full House</span><span class="hand-rank-odds">0.144%</span></div>
+            <div class="hand-rank-desc">Ba + Doi (3 + 2 la cung so)</div>
+            <div class="hand-rank-cards">
+              <div class="h-card red">J&hearts;</div>
+              <div class="h-card black">J&clubs;</div>
+              <div class="h-card red">J&diams;</div>
+              <div class="h-card black">8&spades;</div>
+              <div class="h-card red">8&hearts;</div>
+            </div>
+          </div>
+
+          <div class="hand-rank">
+            <div class="hand-rank-header"><span class="hand-rank-name">5. Flush</span><span class="hand-rank-odds">0.197%</span></div>
+            <div class="hand-rank-desc">5 la cung chat (khong can sanh)</div>
+            <div class="hand-rank-cards">
+              <div class="h-card red">A&diams;</div>
+              <div class="h-card red">J&diams;</div>
+              <div class="h-card red">9&diams;</div>
+              <div class="h-card red">6&diams;</div>
+              <div class="h-card red">3&diams;</div>
+            </div>
+          </div>
+
+          <div class="hand-rank">
+            <div class="hand-rank-header"><span class="hand-rank-name">6. Straight</span><span class="hand-rank-odds">0.392%</span></div>
+            <div class="hand-rank-desc">Sanh (5 la lien tiep)</div>
+            <div class="hand-rank-cards">
+              <div class="h-card red">10&hearts;</div>
+              <div class="h-card black">9&clubs;</div>
+              <div class="h-card red">8&diams;</div>
+              <div class="h-card black">7&spades;</div>
+              <div class="h-card red">6&hearts;</div>
+            </div>
+          </div>
+
+          <div class="hand-rank">
+            <div class="hand-rank-header"><span class="hand-rank-name">7. Three of a Kind</span><span class="hand-rank-odds">2.11%</span></div>
+            <div class="hand-rank-desc">Sam co (3 la cung so)</div>
+            <div class="hand-rank-cards">
+              <div class="h-card red">7&hearts;</div>
+              <div class="h-card red">7&diams;</div>
+              <div class="h-card black">7&clubs;</div>
+              <div class="h-card black">K&spades;</div>
+              <div class="h-card red">2&diams;</div>
+            </div>
+          </div>
+
+          <div class="hand-rank">
+            <div class="hand-rank-header"><span class="hand-rank-name">8. Two Pair</span><span class="hand-rank-odds">4.75%</span></div>
+            <div class="hand-rank-desc">Hai doi</div>
+            <div class="hand-rank-cards">
+              <div class="h-card red">A&hearts;</div>
+              <div class="h-card black">A&spades;</div>
+              <div class="h-card red">9&diams;</div>
+              <div class="h-card black">9&clubs;</div>
+              <div class="h-card red">4&hearts;</div>
+            </div>
+          </div>
+
+          <div class="hand-rank">
+            <div class="hand-rank-header"><span class="hand-rank-name">9. One Pair</span><span class="hand-rank-odds">42.3%</span></div>
+            <div class="hand-rank-desc">Mot doi</div>
+            <div class="hand-rank-cards">
+              <div class="h-card red">Q&hearts;</div>
+              <div class="h-card black">Q&spades;</div>
+              <div class="h-card black">10&clubs;</div>
+              <div class="h-card red">6&diams;</div>
+              <div class="h-card black">3&spades;</div>
+            </div>
+          </div>
+
+          <div class="hand-rank">
+            <div class="hand-rank-header"><span class="hand-rank-name">10. High Card</span><span class="hand-rank-odds">50.1%</span></div>
+            <div class="hand-rank-desc">La cao nhat (khong co to hop nao)</div>
+            <div class="hand-rank-cards">
+              <div class="h-card red">A&hearts;</div>
+              <div class="h-card black">J&spades;</div>
+              <div class="h-card red">8&diams;</div>
+              <div class="h-card black">5&clubs;</div>
+              <div class="h-card red">2&hearts;</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROFILE SCREEN (Step 1) -->
+  <div id="profile-screen" class="screen active">
+    <div class="lobby-container">
+      <h1>Poker LAN</h1>
+      <div class="profile-form">
+        <div class="avatar-picker">
+          <div class="avatar-preview" id="avatar-preview">
+            <span id="avatar-emoji">😎</span>
+          </div>
+          <div class="avatar-list" id="avatar-list"></div>
+        </div>
+        <input type="text" id="player-name" placeholder="Your name" maxlength="12" autocomplete="off">
+        <input type="number" id="player-chips" placeholder="Chips (100 - 10000)" min="100" max="10000" value="1000" autocomplete="off">
+        <button id="btn-enter" onclick="enterLobby()">Enter Lobby</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOBBY SCREEN (Step 2) -->
+  <div id="lobby-screen" class="screen">
+    <div class="lobby-container">
+      <div class="my-profile-card" id="my-profile-card"></div>
+      <div class="lobby-buttons">
+        <button id="btn-create" onclick="createRoom()">Create Room</button>
+        <div class="join-row">
+          <input type="text" id="room-code" placeholder="Room code" maxlength="6" autocomplete="off">
+          <button id="btn-join" onclick="joinRoom()">Join</button>
+        </div>
+      </div>
+      <div class="room-list-section">
+        <h3>Available Rooms</h3>
+        <div id="room-list" class="room-list">
+          <div class="room-list-empty">No rooms available</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROOM SCREEN -->
+  <div id="room-screen" class="screen">
+    <div class="room-header">
+      <span>Room: <strong id="room-id-display"></strong></span>
+      <button id="btn-leave" onclick="leaveRoom()">Leave</button>
+    </div>
+    <div id="player-list" class="player-list"></div>
+    <div class="room-actions">
+      <button id="btn-ready" onclick="toggleReady()">Ready</button>
+      <button id="btn-start" onclick="startGame()" style="display:none">Start Game</button>
+    </div>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="game-screen" class="screen">
+    <div class="poker-table">
+      <div class="table-surface">
+        <div id="community-cards" class="community-cards"></div>
+        <div id="pot-display" class="pot-display">Pot: 0</div>
+        <div id="stage-display" class="stage-display"></div>
+      </div>
+      <div id="seats" class="seats"></div>
+    </div>
+    <div id="game-actions" class="game-actions" style="display:none">
+      <button onclick="doAction('fold')" class="btn-fold">Fold</button>
+      <button onclick="doAction('check')" id="btn-check" class="btn-check">Check</button>
+      <button onclick="doAction('call')" id="btn-call" class="btn-call" style="display:none">Call <span id="call-amount"></span></button>
+      <div class="raise-group">
+        <div class="pot-buttons">
+          <button onclick="setPotRaise(1/3)" class="btn-pot">1/3</button>
+          <button onclick="setPotRaise(1/2)" class="btn-pot">1/2</button>
+          <button onclick="setPotRaise(2/3)" class="btn-pot">2/3</button>
+          <button onclick="setPotRaise(1)" class="btn-pot">Pot</button>
+        </div>
+        <div class="slider-row">
+          <input type="range" id="raise-slider" min="0" max="1000" value="0" oninput="updateRaiseLabel()">
+          <span id="raise-label">0</span>
+          <button onclick="doAction('raise')" class="btn-raise">Raise</button>
+        </div>
+      </div>
+      <button onclick="doAction('allin')" class="btn-allin">All-In</button>
+    </div>
+    <div id="result-overlay" class="result-overlay" style="display:none">
+      <div class="result-content">
+        <h2 id="result-text"></h2>
+        <div id="result-details"></div>
+        <button onclick="closeResult()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
