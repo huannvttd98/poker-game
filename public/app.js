@@ -102,6 +102,19 @@ function joinRoom() {
   });
 }
 
+function exitGame() {
+  if (!confirm('Thoat khoi ban? Ban se mat het chips da dat.')) return;
+  socket.emit('leaveRoom');
+  myId = null;
+  myRoomId = null;
+  currentRoom = null;
+  currentGame = null;
+  isReady = false;
+  stopTimer();
+  closeResult();
+  showScreen('lobby-screen');
+}
+
 function leaveRoom() {
   socket.emit('leaveRoom');
   myId = null;
@@ -192,11 +205,22 @@ socket.on('roomUpdate', (room) => {
   const btnStart = document.getElementById('btn-start');
   btnStart.style.display = isHost ? 'inline-block' : 'none';
 
-  // If game started, switch to game screen
+  // If game started, switch to game screen and close result overlay
   if (room.status === 'playing') {
+    closeResult();
     showScreen('game-screen');
-  } else if (room.status === 'waiting' && document.getElementById('game-screen').classList.contains('active')) {
-    // Stay on game screen if result overlay is showing
+  }
+
+  // Update ready status in result overlay when waiting for next hand
+  if (room.status === 'waiting_next') {
+    const readyEl = document.getElementById('ready-status');
+    if (readyEl) {
+      const total = room.players.length;
+      const readyCount = room.players.filter(p => p.ready).length;
+      readyEl.innerHTML = room.players.map(p =>
+        `<span class="ready-dot ${p.ready ? 'is-ready' : ''}">${p.avatar || '😎'}</span>`
+      ).join('') + `<div class="ready-count">${readyCount}/${total} ready</div>`;
+    }
   }
 });
 
@@ -214,15 +238,15 @@ function getSeatPositions() {
   const isMobile = window.innerWidth < 768;
   if (isMobile) {
     return [
-      { top: 92, left: 50 },   // 0: bottom center (me)
-      { top: 80, left: 10 },   // 1: bottom left
+      { top: 82, left: 50 },   // 0: bottom center (me)
+      { top: 74, left: 10 },   // 1: bottom left
       { top: 52, left: 3 },    // 2: mid left
       { top: 22, left: 10 },   // 3: top left
       { top: 7,  left: 32 },   // 4: top left-center
       { top: 7,  left: 68 },   // 5: top right-center
       { top: 22, left: 90 },   // 6: top right
       { top: 52, left: 97 },   // 7: mid right
-      { top: 80, left: 90 },   // 8: bottom right
+      { top: 74, left: 90 },   // 8: bottom right
     ];
   }
   return [
@@ -292,7 +316,7 @@ function renderGame(game) {
   startTimer(game);
 }
 
-function renderPlayerCards(player, stage) {
+function renderPlayerCards(player) {
   if (!player.hand) {
     // Hidden cards
     if (!player.folded) {
@@ -340,6 +364,13 @@ function updateRaiseLabel() {
   document.getElementById('raise-label').textContent = document.getElementById('raise-slider').value;
 }
 
+function adjustRaise(amount) {
+  const slider = document.getElementById('raise-slider');
+  const newVal = Math.max(parseInt(slider.min), Math.min(parseInt(slider.max), parseInt(slider.value) + amount));
+  slider.value = newVal;
+  updateRaiseLabel();
+}
+
 function setPotRaise(fraction) {
   if (!currentGame) return;
   const slider = document.getElementById('raise-slider');
@@ -373,18 +404,58 @@ socket.on('handFinished', (result) => {
 
   if (result.reason === 'others_folded') {
     const w = result.winners[0];
-    const name = currentGame?.players.find(p => p.id === w.playerId)?.name || 'Unknown';
-    textEl.textContent = `${name} wins!`;
-    detailsEl.innerHTML = `<div class="winner-line">+${w.amount} chips</div>
-      <div class="hand-name">Others folded</div>`;
+    const p = currentGame?.players.find(p => p.id === w.playerId);
+    const name = p?.name || 'Unknown';
+    const avatar = p?.avatar || '😎';
+    textEl.textContent = 'Winner!';
+    detailsEl.innerHTML = `
+      <div class="result-player">
+        <span class="result-avatar">${avatar}</span>
+        <span class="result-name">${esc(name)}</span>
+      </div>
+      <div class="result-chips">+${w.amount} chips</div>
+      <div class="result-reason">Doi thu bo bai</div>`;
   } else {
     textEl.textContent = 'Showdown!';
-    detailsEl.innerHTML = result.winners.map(w => {
-      const name = currentGame?.players.find(p => p.id === w.playerId)?.name || 'Unknown';
-      return `<div class="winner-line">${esc(name)} wins ${w.amount} chips</div>
-        <div class="hand-name">${w.hand || ''}</div>`;
-    }).join('');
+
+    // Community cards
+    const ccHtml = currentGame?.communityCards?.length
+      ? `<div class="result-community">
+          <div class="result-section-label">Bai chung</div>
+          <div class="result-cards">${currentGame.communityCards.map(c => renderCard(c)).join('')}</div>
+        </div>`
+      : '';
+
+    // All players' hands (not folded)
+    const playersHtml = currentGame?.players
+      .filter(p => !p.folded && p.hand)
+      .map(p => {
+        const isWinner = result.winners.some(w => w.playerId === p.id);
+        const handName = result.hands?.[p.id] || '';
+        const winAmount = result.winners.find(w => w.playerId === p.id)?.amount || 0;
+        return `
+          <div class="result-player-hand ${isWinner ? 'is-winner' : 'is-loser'}">
+            <div class="result-player-info">
+              <span class="result-avatar-sm">${p.avatar || '😎'}</span>
+              <span class="result-name-sm">${esc(p.name)}</span>
+              ${isWinner ? `<span class="result-win-amount">+${winAmount}</span>` : ''}
+            </div>
+            <div class="result-cards">${p.hand.map(c => renderCard(c)).join('')}</div>
+            <div class="result-hand-name">${handName}</div>
+          </div>`;
+      }).join('') || '';
+
+    detailsEl.innerHTML = ccHtml + '<div class="result-players-list">' + playersHtml + '</div>';
   }
+
+  // Reset ready button
+  const btnReady = document.getElementById('btn-ready-next');
+  btnReady.textContent = 'Ready';
+  btnReady.disabled = false;
+  btnReady.classList.remove('btn-waiting');
+
+  // Clear ready status
+  document.getElementById('ready-status').innerHTML = '';
 
   overlay.style.display = 'flex';
 });
@@ -393,22 +464,18 @@ function closeResult() {
   document.getElementById('result-overlay').style.display = 'none';
 }
 
-// Auto-start next hand
-socket.on('nextHandIn', (delay) => {
-  const btn = document.querySelector('.result-content button');
-  if (!btn) return;
-  let remaining = Math.ceil(delay / 1000);
-  btn.textContent = `Van moi sau ${remaining}s`;
-  const cd = setInterval(() => {
-    remaining--;
-    if (remaining <= 0) {
-      clearInterval(cd);
-      closeResult();
-    } else {
-      btn.textContent = `Van moi sau ${remaining}s`;
-    }
-  }, 1000);
+socket.on('backToLobby', () => {
+  closeResult();
+  showScreen('room-screen');
 });
+
+function readyNextHand() {
+  socket.emit('toggleReady');
+  const btn = document.getElementById('btn-ready-next');
+  btn.textContent = 'Waiting...';
+  btn.disabled = true;
+  btn.classList.add('btn-waiting');
+}
 
 // ============================================
 // UTILS

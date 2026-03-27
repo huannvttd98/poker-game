@@ -497,7 +497,7 @@ function finishHand(room) {
   game.result = result;
   room.status = 'waiting';
   syncChips(room);
-  scheduleNextHand(room);
+  prepareNextHand(room);
 
   return { success: true, finished: true, result };
 }
@@ -544,44 +544,48 @@ function showdown(room) {
   game.result = result;
   room.status = 'waiting';
   syncChips(room);
-  scheduleNextHand(room);
+  prepareNextHand(room);
 
   return { success: true, finished: true, result };
 }
 
-function scheduleNextHand(room) {
-  if (room._nextHandTimer) clearTimeout(room._nextHandTimer);
+function prepareNextHand(room) {
+  // Remove busted players (0 chips)
+  room.players = room.players.filter(p => p.chips > 0);
 
-  room._nextHandTimer = setTimeout(() => {
-    room._nextHandTimer = null;
+  // Reset ready for all players
+  room.players.forEach(p => p.ready = false);
 
-    // Remove busted players (0 chips)
-    room.players = room.players.filter(p => p.chips > 0);
+  room.status = 'waiting_next';
 
-    // Need at least 2 players
-    if (room.players.length < 2) {
-      room.status = 'waiting';
-      io.to(room.id).emit('roomUpdate', getRoomState(room));
-      broadcastRoomList();
-      return;
-    }
+  io.to(room.id).emit('roomUpdate', getRoomState(room));
+  broadcastRoomList();
+}
 
-    if (!startGame(room)) {
-      room.status = 'waiting';
-      io.to(room.id).emit('roomUpdate', getRoomState(room));
-      broadcastRoomList();
-      return;
-    }
+function checkAllReadyAndStart(room) {
+  if (room.status !== 'waiting_next') return;
 
+  const allReady = room.players.every(p => p.ready);
+  if (!allReady) return;
+
+  // Not enough players - go back to lobby
+  if (room.players.length < 2) {
+    room.status = 'waiting';
+    room.game = null;
+    room.players.forEach(p => p.ready = false);
     io.to(room.id).emit('roomUpdate', getRoomState(room));
-    for (const p of room.game.players) {
-      io.to(p.id).emit('gameUpdate', getGameStateForPlayer(room, p.id));
-    }
-    console.log(`[Game] Auto-started next hand in room ${room.id}`);
-  }, NEXT_HAND_DELAY);
+    io.to(room.id).emit('backToLobby');
+    broadcastRoomList();
+    return;
+  }
 
-  // Tell clients a new hand is coming
-  io.to(room.id).emit('nextHandIn', NEXT_HAND_DELAY);
+  if (!startGame(room)) return;
+
+  io.to(room.id).emit('roomUpdate', getRoomState(room));
+  for (const p of room.game.players) {
+    io.to(p.id).emit('gameUpdate', getGameStateForPlayer(room, p.id));
+  }
+  console.log(`[Game] All ready - started next hand in room ${room.id}`);
 }
 
 function syncChips(room) {
@@ -724,6 +728,11 @@ io.on('connection', (socket) => {
     if (player) {
       player.ready = !player.ready;
       io.to(room.id).emit('roomUpdate', getRoomState(room));
+
+      // Auto start if all ready between hands
+      if (room.status === 'waiting_next') {
+        checkAllReadyAndStart(room);
+      }
     }
   });
 
