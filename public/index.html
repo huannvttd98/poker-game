@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Poker LAN</title>
-    <link rel="stylesheet" href="style.css?v=1.1.5" />
+    <link rel="stylesheet" href="style.css?v=2.3" />
   </head>
   <body>
     <!-- TOP BAR: Timer + Help -->
@@ -381,27 +381,24 @@
         </div>
         <div class="raise-section">
           <div class="pot-buttons">
-            <button onclick="setPotRaise(1 / 3)" class="btn-pot">1/3</button>
-            <button onclick="setPotRaise(1 / 2)" class="btn-pot">1/2</button>
-            <button onclick="setPotRaise(2 / 3)" class="btn-pot">2/3</button>
-            <button onclick="setPotRaise(1)" class="btn-pot">Pot</button>
+            <button onclick="setPotRaise(1/3)" class="btn-pot">1/3 Pot</button>
+            <button onclick="setPotRaise(1/2)" class="btn-pot">1/2 Pot</button>
+            <button onclick="setPotRaise(2/3)" class="btn-pot">2/3 Pot</button>
+            <button onclick="setPotRaise(1)" class="btn-pot">Full Pot</button>
           </div>
-          <div class="raise-control">
-            <button onclick="adjustRaise(-5)" class="btn-adjust">-5</button>
-            <input
-              type="range"
-              id="raise-slider"
-              min="0"
-              max="1000"
-              value="0"
-              oninput="updateRaiseLabel()"
-            />
-            <button onclick="adjustRaise(5)" class="btn-adjust">+5</button>
+          <div class="raise-input-row">
+            <button onclick="adjustRaise(-1)" class="btn-adjust">-BB</button>
+            <input type="number" id="raise-input" class="raise-input" min="0" max="10000" value="0"
+              oninput="syncSliderFromInput()" />
+            <button onclick="adjustRaise(1)" class="btn-adjust">+BB</button>
           </div>
-          <div class="raise-submit">
-            <span id="raise-label" class="raise-value">0</span>
-            <button onclick="doAction('raise')" class="btn-raise">Raise</button>
+          <div class="raise-slider-row">
+            <span class="raise-min-label" id="raise-min-label">Min</span>
+            <input type="range" id="raise-slider" min="0" max="1000" value="0"
+              oninput="syncInputFromSlider()" />
+            <span class="raise-max-label" id="raise-max-label">Max</span>
           </div>
+          <button onclick="doAction('raise')" class="btn-raise">Raise <span id="raise-label">0</span></button>
         </div>
       </div>
       <div id="result-overlay" class="result-overlay" style="display: none">
@@ -414,7 +411,7 @@
       </div>
     </div>
 
-    <script src="/socket.io/socket.io.js?v=1.1.5"></script>
-    <script src="app.js?v=1.1.5"></script>
+    <script src="/socket.io/socket.io.js?v=2.3"></script>
+    <script src="app.js?v=2.3"></script>
   </body>
 </html>

@@ -371,33 +371,76 @@ function renderActions(game) {
   document.getElementById('btn-call').style.display = canCheck ? 'none' : 'inline-block';
   document.getElementById('call-amount').textContent = Math.min(callAmount, me.chips);
 
-  // Raise slider
+  // Raise controls
   const slider = document.getElementById('raise-slider');
+  const input = document.getElementById('raise-input');
   const minRaise = game.currentBet + game.minRaise;
+  const maxRaise = me.chips + me.bet;
   slider.min = minRaise;
-  slider.max = me.chips + me.bet;
+  slider.max = maxRaise;
   slider.value = minRaise;
-  updateRaiseLabel();
+  input.min = minRaise;
+  input.max = maxRaise;
+  input.value = minRaise;
+  document.getElementById('raise-min-label').textContent = minRaise;
+  document.getElementById('raise-max-label').textContent = maxRaise;
+  updateRaiseDisplay(minRaise);
+  updatePotButtons(game.pot, minRaise, maxRaise);
 }
 
-function updateRaiseLabel() {
-  document.getElementById('raise-label').textContent = document.getElementById('raise-slider').value;
+function updatePotButtons(pot, minRaise, maxRaise) {
+  const fractions = [1/3, 1/2, 2/3, 1];
+  document.querySelectorAll('.btn-pot').forEach((btn, i) => {
+    const val = Math.floor(pot * fractions[i]);
+    const valid = val >= minRaise && val <= maxRaise;
+    btn.classList.toggle('btn-pot-disabled', !valid);
+    btn.disabled = !valid;
+  });
 }
 
-function adjustRaise(amount) {
+function updateRaiseDisplay(val) {
+  document.getElementById('raise-label').textContent = val;
+}
+
+function syncInputFromSlider() {
+  const val = document.getElementById('raise-slider').value;
+  document.getElementById('raise-input').value = val;
+  updateRaiseDisplay(val);
+}
+
+function syncSliderFromInput() {
+  const input = document.getElementById('raise-input');
   const slider = document.getElementById('raise-slider');
-  const newVal = Math.max(parseInt(slider.min), Math.min(parseInt(slider.max), parseInt(slider.value) + amount));
+  const val = Math.max(parseInt(slider.min), Math.min(parseInt(slider.max), parseInt(input.value) || 0));
+  slider.value = val;
+  updateRaiseDisplay(val);
+}
+
+function adjustRaise(bbMultiplier) {
+  const bb = currentGame?.minRaise || 20;
+  const slider = document.getElementById('raise-slider');
+  const input = document.getElementById('raise-input');
+  const step = bb * Math.abs(bbMultiplier);
+  const dir = bbMultiplier > 0 ? 1 : -1;
+  const newVal = Math.max(parseInt(slider.min), Math.min(parseInt(slider.max), parseInt(slider.value) + step * dir));
   slider.value = newVal;
-  updateRaiseLabel();
+  input.value = newVal;
+  updateRaiseDisplay(newVal);
 }
 
 function setPotRaise(fraction) {
-  if (!currentGame) return;
+  if (!currentGame) {
+    console.error('No current game data');
+    return;
+  }
   const slider = document.getElementById('raise-slider');
+  const input = document.getElementById('raise-input');
+
   const potRaise = Math.floor(currentGame.pot * fraction);
   const val = Math.max(parseInt(slider.min), Math.min(parseInt(slider.max), potRaise));
   slider.value = val;
-  updateRaiseLabel();
+  input.value = val;
+  updateRaiseDisplay(val);
 }
 
 // ============================================
@@ -406,7 +449,7 @@ function setPotRaise(fraction) {
 function doAction(action) {
   let amount = 0;
   if (action === 'raise') {
-    amount = parseInt(document.getElementById('raise-slider').value);
+    amount = parseInt(document.getElementById('raise-input').value) || parseInt(document.getElementById('raise-slider').value);
   }
   socket.emit('action', { action, amount }, (res) => {
     if (res?.error) alert(res.error);
