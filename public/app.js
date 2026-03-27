@@ -83,7 +83,8 @@ initAvatarPicker();
 // LOBBY
 // ============================================
 function createRoom() {
-  socket.emit('createRoom', { playerName: myProfile.name, chips: myProfile.chips, avatar: myProfile.avatar }, (res) => {
+  const roomName = document.getElementById('room-name').value.trim() || '';
+  socket.emit('createRoom', { playerName: myProfile.name, chips: myProfile.chips, avatar: myProfile.avatar, roomName }, (res) => {
     if (res.error) return alert(res.error);
     myId = res.playerId;
     myRoomId = res.roomId;
@@ -98,7 +99,11 @@ function joinRoom() {
     if (res.error) return alert(res.error);
     myId = res.playerId;
     myRoomId = res.roomId;
-    showScreen('room-screen');
+    if (res.spectator) {
+      showScreen('game-screen');
+    } else {
+      showScreen('room-screen');
+    }
   });
 }
 
@@ -149,17 +154,19 @@ socket.on('roomList', (roomList) => {
     return;
   }
   el.innerHTML = roomList.map(r => {
-    const canJoin = r.status === 'waiting' && r.playerCount < r.maxPlayers;
+    const canJoin = r.playerCount < r.maxPlayers;
+    const isPlaying = r.status === 'playing' || r.status === 'waiting_next';
+    const btnText = canJoin ? (isPlaying ? 'Watch' : 'Join') : 'Full';
     return `
       <div class="room-list-item">
         <div class="room-info">
-          <div class="room-code">${esc(r.id)}</div>
-          <div class="room-host">Host: ${esc(r.hostName)}</div>
+          <div class="room-code">${r.name ? esc(r.name) : esc(r.id)}</div>
+          <div class="room-host">${r.name ? esc(r.id) + ' · ' : ''}Host: ${esc(r.hostName)}</div>
         </div>
         <span class="room-players">${r.playerCount}/${r.maxPlayers}</span>
-        <span class="room-status-badge ${r.status}">${r.status}</span>
+        <span class="room-status-badge ${r.status}">${isPlaying ? 'playing' : r.status}</span>
         <button class="btn-quick-join" onclick="quickJoin('${esc(r.id)}')" ${canJoin ? '' : 'disabled'}>
-          ${canJoin ? 'Join' : (r.status === 'playing' ? 'In Game' : 'Full')}
+          ${btnText}
         </button>
       </div>
     `;
@@ -171,7 +178,11 @@ function quickJoin(roomId) {
     if (res.error) return alert(res.error);
     myId = res.playerId;
     myRoomId = res.roomId;
-    showScreen('room-screen');
+    if (res.spectator) {
+      showScreen('game-screen');
+    } else {
+      showScreen('room-screen');
+    }
   });
 }
 
@@ -180,7 +191,7 @@ function quickJoin(roomId) {
 // ============================================
 socket.on('roomUpdate', (room) => {
   currentRoom = room;
-  document.getElementById('room-id-display').textContent = room.id;
+  document.getElementById('room-id-display').textContent = room.name ? `${room.name} (${room.id})` : room.id;
 
   // Player list
   const listEl = document.getElementById('player-list');
@@ -195,6 +206,7 @@ socket.on('roomUpdate', (room) => {
         <div class="player-name">${esc(p.name)}</div>
         <div class="player-chips">${p.chips} chips</div>
         ${p.ready ? '<div class="player-status">Ready</div>' : ''}
+        ${p.spectator ? '<div class="player-status" style="color:#ff9800">Watching</div>' : ''}
         ${!p.connected ? '<div class="player-status" style="color:#e94560">Disconnected</div>' : ''}
       </div>
     `;
@@ -250,15 +262,15 @@ function getSeatPositions() {
     ];
   }
   return [
-    { top: 90, left: 50 },
-    { top: 78, left: 12 },
-    { top: 48, left: 4 },
-    { top: 18, left: 12 },
-    { top: 6,  left: 34 },
-    { top: 6,  left: 66 },
-    { top: 18, left: 88 },
-    { top: 48, left: 96 },
-    { top: 78, left: 88 },
+    { top: 85, left: 50 },   // 0: bottom center (me)
+    { top: 75, left: 15 },   // 1: bottom left
+    { top: 48, left: 6 },    // 2: mid left
+    { top: 18, left: 15 },   // 3: top left
+    { top: 6,  left: 36 },   // 4: top left-center
+    { top: 6,  left: 64 },   // 5: top right-center
+    { top: 18, left: 85 },   // 6: top right
+    { top: 48, left: 94 },   // 7: mid right
+    { top: 75, left: 85 },   // 8: bottom right
   ];
 }
 
@@ -266,8 +278,13 @@ function renderGame(game) {
   // Reorder players so current player is at seat 0
   const myIndex = game.players.findIndex(p => p.id === myId);
   const ordered = [];
-  for (let i = 0; i < game.players.length; i++) {
-    ordered.push(game.players[(myIndex + i) % game.players.length]);
+  if (myIndex >= 0) {
+    for (let i = 0; i < game.players.length; i++) {
+      ordered.push(game.players[(myIndex + i) % game.players.length]);
+    }
+  } else {
+    // Spectator - show all players as-is
+    ordered.push(...game.players);
   }
 
   // Seats
@@ -314,6 +331,9 @@ function renderGame(game) {
 
   // Timer
   startTimer(game);
+
+  // Log
+  renderLog(game.actionLog);
 }
 
 function renderPlayerCards(player) {
@@ -464,6 +484,23 @@ function closeResult() {
   document.getElementById('result-overlay').style.display = 'none';
 }
 
+socket.on('busted', () => {
+  stopTimer();
+  closeResult();
+  myId = null;
+  myRoomId = null;
+  currentRoom = null;
+  currentGame = null;
+  isReady = false;
+  showScreen('lobby-screen');
+  alert('Ban da het chips! Tu dong roi khoi ban.');
+});
+
+// Spectator mode
+socket.on('spectatorMode', () => {
+  showScreen('game-screen');
+});
+
 socket.on('backToLobby', () => {
   closeResult();
   showScreen('room-screen');
@@ -536,6 +573,32 @@ function stopTimer() {
   }
   const el = document.getElementById('global-timer');
   if (el) el.style.display = 'none';
+}
+
+// ============================================
+// ACTION LOG
+// ============================================
+function toggleLog() {
+  const el = document.getElementById('action-log');
+  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+}
+
+function renderLog(log) {
+  const list = document.getElementById('action-log-list');
+  if (!list || !log) return;
+
+  list.innerHTML = log.map(entry => {
+    if (entry.action === 'stage') {
+      return `<div class="log-entry log-stage">--- ${entry.stage} ---</div>`;
+    }
+    const amountStr = entry.amount ? ` <span class="log-amount">${entry.amount}</span>` : '';
+    return `<div class="log-entry log-${entry.action}">
+      <span class="log-name">${esc(entry.player)}</span>
+      <span class="log-action">${entry.action}</span>${amountStr}
+    </div>`;
+  }).join('');
+
+  list.scrollTop = list.scrollHeight;
 }
 
 // ============================================

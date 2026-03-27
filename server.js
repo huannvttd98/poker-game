@@ -3,6 +3,24 @@ const http = require('http');
 const { Server } = require('socket.io');
 const os = require('os');
 const path = require('path');
+const fs = require('fs');
+
+// ============================================
+// FILE LOGGER
+// ============================================
+const LOG_DIR = path.join(__dirname, 'logs');
+if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR);
+
+function getLogFile() {
+  const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  return path.join(LOG_DIR, `game-${date}.log`);
+}
+
+function writeLog(type, data) {
+  const time = new Date().toISOString();
+  const line = `[${time}] [${type}] ${JSON.stringify(data)}\n`;
+  fs.appendFile(getLogFile(), line, () => {});
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -80,9 +98,10 @@ function clampChips(val) {
   return Math.max(100, Math.min(10000, n));
 }
 
-function createRoom(roomId, hostId, hostName, chips, avatar) {
+function createRoom(roomId, hostId, hostName, chips, avatar, roomName) {
   const room = {
     id: roomId,
+    name: roomName || '',
     hostId,
     players: [{
       id: hostId,
@@ -136,7 +155,7 @@ function removePlayer(room, playerId) {
 function startGame(room) {
   if (room.players.length < 2) return false;
 
-  const activePlayers = room.players.filter(p => p.connected);
+  const activePlayers = room.players.filter(p => p.connected && !p.spectator);
   if (activePlayers.length < 2) return false;
 
   const prevGame = room.game;
@@ -198,7 +217,11 @@ function startGame(room) {
     minRaise: bigBlind,
     lastRaiser: bbIndex,
     smallBlindAmount: smallBlind,
-    bigBlindAmount: bigBlind
+    bigBlindAmount: bigBlind,
+    actionLog: [
+      { player: gamePlayers[sbIndex].name, action: 'Small Blind', amount: sbAmount },
+      { player: gamePlayers[bbIndex].name, action: 'Big Blind', amount: bbAmount }
+    ]
   };
 
   room.status = 'playing';
@@ -234,6 +257,7 @@ function startTurnTimer(room) {
       io.to(room.id).emit('handFinished', result.result);
     }
 
+    writeLog('AUTO_FOLD', { roomId: room.id, player: currentPlayer.name });
     console.log(`[Timer] Auto-fold ${currentPlayer.name} in room ${room.id}`);
   }, TURN_TIME * 1000);
 }
@@ -349,6 +373,14 @@ function handleAction(room, playerId, action, amount = 0) {
       return { error: 'Unknown action' };
   }
 
+  // Log action
+  const logEntry = { player: player.name, action };
+  if (action === 'call') logEntry.amount = game.currentBet - (player.bet - (game.currentBet - player.bet));
+  if (action === 'raise') logEntry.amount = amount;
+  if (action === 'allin') logEntry.amount = player.totalBet;
+  game.actionLog.push(logEntry);
+  writeLog('ACTION', { roomId: room.id, ...logEntry, chipsLeft: player.chips });
+
   // Check if only 1 player remains
   if (countActivePlayers(game) === 1) {
     clearTurnTimer(room);
@@ -390,6 +422,7 @@ function advanceStage(room) {
   }
 
   game.stage = stages[currentIdx + 1];
+  game.actionLog.push({ action: 'stage', stage: game.stage });
 
   switch (game.stage) {
     case 'flop':
@@ -496,6 +529,7 @@ function finishHand(room) {
   game.stage = 'finished';
   game.result = result;
   room.status = 'waiting';
+  writeLog('HAND_END', { roomId: room.id, reason: 'others_folded', winners: result.winners });
   syncChips(room);
   prepareNextHand(room);
 
@@ -543,6 +577,7 @@ function showdown(room) {
 
   game.result = result;
   room.status = 'waiting';
+  writeLog('HAND_END', { roomId: room.id, reason: 'showdown', winners: result.winners, hands: result.hands });
   syncChips(room);
   prepareNextHand(room);
 
@@ -550,11 +585,27 @@ function showdown(room) {
 }
 
 function prepareNextHand(room) {
-  // Remove busted players (0 chips)
+  // Delay busted notification so players see the result first
+  const busted = room.players.filter(p => p.chips <= 0);
+  if (busted.length > 0) {
+    setTimeout(() => {
+      for (const p of busted) {
+        io.to(p.id).emit('busted');
+        const sock = io.sockets.sockets.get(p.id);
+        if (sock) {
+          sock.leave(room.id);
+          playerSockets.delete(p.id);
+        }
+      }
+    }, 3000);
+  }
   room.players = room.players.filter(p => p.chips > 0);
 
-  // Reset ready for all players
-  room.players.forEach(p => p.ready = false);
+  // Reset ready and spectator for all players
+  room.players.forEach(p => {
+    p.ready = false;
+    p.spectator = false;
+  });
 
   room.status = 'waiting_next';
 
@@ -582,9 +633,8 @@ function checkAllReadyAndStart(room) {
   if (!startGame(room)) return;
 
   io.to(room.id).emit('roomUpdate', getRoomState(room));
-  for (const p of room.game.players) {
-    io.to(p.id).emit('gameUpdate', getGameStateForPlayer(room, p.id));
-  }
+  broadcastGameState(room);
+  writeLog('GAME_START', { roomId: room.id, players: room.game.players.map(p => ({ name: p.name, chips: p.chips })) });
   console.log(`[Game] All ready - started next hand in room ${room.id}`);
 }
 
@@ -621,6 +671,7 @@ function getGameStateForPlayer(room, playerId) {
     minRaise: game.minRaise,
     turnTime: TURN_TIME,
     turnDeadline: game.turnDeadline || null,
+    actionLog: game.actionLog || [],
     result: game.result || null,
     players: game.players.map((p, i) => ({
       id: p.id,
@@ -641,9 +692,24 @@ function getGameStateForPlayer(room, playerId) {
   };
 }
 
+function broadcastGameState(room) {
+  if (!room.game) return;
+  // Send to game players
+  for (const p of room.game.players) {
+    io.to(p.id).emit('gameUpdate', getGameStateForPlayer(room, p.id));
+  }
+  // Send to spectators
+  for (const p of room.players) {
+    if (p.spectator) {
+      io.to(p.id).emit('gameUpdate', getGameStateForPlayer(room, p.id));
+    }
+  }
+}
+
 function getRoomState(room) {
   return {
     id: room.id,
+    name: room.name || '',
     hostId: room.hostId,
     status: room.status,
     players: room.players.map(p => ({
@@ -652,7 +718,8 @@ function getRoomState(room) {
       chips: p.chips,
       avatar: p.avatar,
       ready: p.ready,
-      connected: p.connected
+      connected: p.connected,
+      spectator: p.spectator || false
     }))
   };
 }
@@ -665,6 +732,7 @@ function getRoomList() {
   for (const [id, room] of rooms) {
     list.push({
       id,
+      name: room.name || '',
       hostName: room.players.find(p => p.id === room.hostId)?.name || '???',
       playerCount: room.players.length,
       maxPlayers: 9,
@@ -688,15 +756,16 @@ io.on('connection', (socket) => {
   socket.emit('roomList', getRoomList());
 
   // Create room
-  socket.on('createRoom', ({ playerName, chips, avatar }, callback) => {
+  socket.on('createRoom', ({ playerName, chips, avatar, roomName }, callback) => {
     const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     const playerId = socket.id;
-    const room = createRoom(roomId, playerId, playerName, chips, avatar);
+    const room = createRoom(roomId, playerId, playerName, chips, avatar, roomName);
     playerSockets.set(socket.id, { roomId, playerId });
     socket.join(roomId);
     callback({ success: true, roomId, playerId });
     io.to(roomId).emit('roomUpdate', getRoomState(room));
     broadcastRoomList();
+    writeLog('ROOM_CREATE', { roomId, player: playerName, chips: clampChips(chips) });
     console.log(`[Room] ${playerName} created room ${roomId}`);
   });
 
@@ -704,18 +773,28 @@ io.on('connection', (socket) => {
   socket.on('joinRoom', ({ roomId, playerName, chips, avatar }, callback) => {
     const room = getRoom(roomId);
     if (!room) return callback({ error: 'Room not found' });
-    if (room.status === 'playing') return callback({ error: 'Game in progress' });
 
     const playerId = socket.id;
     const player = addPlayer(room, playerId, playerName, chips, avatar);
     if (!player) return callback({ error: 'Room is full or already joined' });
 
+    const isSpectator = room.status === 'playing' || room.status === 'waiting_next';
+    if (isSpectator) player.spectator = true;
+
     playerSockets.set(socket.id, { roomId, playerId });
     socket.join(roomId);
-    callback({ success: true, roomId, playerId });
+    callback({ success: true, roomId, playerId, spectator: isSpectator });
     io.to(roomId).emit('roomUpdate', getRoomState(room));
+
+    // Send current game state to spectator
+    if (isSpectator && room.game) {
+      socket.emit('gameUpdate', getGameStateForPlayer(room, playerId));
+      socket.emit('spectatorMode');
+    }
+
     broadcastRoomList();
-    console.log(`[Room] ${playerName} joined room ${roomId}`);
+    writeLog('ROOM_JOIN', { roomId, player: playerName, chips: clampChips(chips), spectator: isSpectator });
+    console.log(`[Room] ${playerName} joined room ${roomId}${isSpectator ? ' (spectator)' : ''}`);
   });
 
   // Toggle ready
@@ -753,11 +832,8 @@ io.on('connection', (socket) => {
     callback?.({ success: true });
     io.to(room.id).emit('roomUpdate', getRoomState(room));
 
-    // Send game state to each player
-    for (const p of room.game.players) {
-      const sid = p.id; // socketId is playerId
-      io.to(sid).emit('gameUpdate', getGameStateForPlayer(room, p.id));
-    }
+    broadcastGameState(room);
+    writeLog('GAME_START', { roomId: room.id, players: room.game.players.map(p => ({ name: p.name, chips: p.chips })) });
     console.log(`[Game] Started in room ${room.id}`);
   });
 
@@ -773,10 +849,7 @@ io.on('connection', (socket) => {
 
     callback?.({ success: true });
 
-    // Send updated state to all players
-    for (const p of room.game.players) {
-      io.to(p.id).emit('gameUpdate', getGameStateForPlayer(room, p.id));
-    }
+    broadcastGameState(room);
 
     if (result.finished) {
       io.to(room.id).emit('roomUpdate', getRoomState(room));
@@ -812,18 +885,13 @@ function handleDisconnect(socket) {
       // If it was their turn, advance
       if (game_isPlayerTurn(room.game, info.playerId)) {
         const result = handleAction_afterFold(room);
-        for (const p of room.game.players) {
-          io.to(p.id).emit('gameUpdate', getGameStateForPlayer(room, p.id));
-        }
+        broadcastGameState(room);
         if (result && result.finished) {
           io.to(room.id).emit('roomUpdate', getRoomState(room));
           io.to(room.id).emit('handFinished', result.result);
         }
       } else {
-        // Not their turn, just update state
-        for (const p of room.game.players) {
-          io.to(p.id).emit('gameUpdate', getGameStateForPlayer(room, p.id));
-        }
+        broadcastGameState(room);
       }
     }
   }
@@ -838,6 +906,7 @@ function handleDisconnect(socket) {
     io.to(info.roomId).emit('roomUpdate', getRoomState(room));
   }
   broadcastRoomList();
+  writeLog('DISCONNECT', { roomId: info.roomId, playerId: info.playerId });
   console.log(`[Disconnect] ${info.playerId} removed from room ${info.roomId}`);
 }
 

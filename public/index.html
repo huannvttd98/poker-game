@@ -310,6 +310,7 @@
       <div class="lobby-container">
         <div class="my-profile-card" id="my-profile-card"></div>
         <div class="lobby-buttons">
+          <input type="text" id="room-name" placeholder="Room name (optional)" maxlength="20" autocomplete="off" />
           <button id="btn-create" onclick="createRoom()">Create Room</button>
           <div class="join-row">
             <input
@@ -349,6 +350,11 @@
     <!-- GAME SCREEN -->
     <div id="game-screen" class="screen">
       <button class="btn-exit-game" onclick="exitGame()">Exit</button>
+      <button class="btn-toggle-log" onclick="toggleLog()">Log</button>
+      <div id="action-log" class="action-log" style="display:none">
+        <div class="action-log-header">Action Log</div>
+        <div id="action-log-list" class="action-log-list"></div>
+      </div>
       <div class="poker-table">
         <div class="table-surface">
           <div id="community-cards" class="community-cards"></div>
