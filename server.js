@@ -79,7 +79,7 @@ function evaluateHands(players, communityCards) {
     if (p.folded) continue;
     const allCards = [...p.hand, ...communityCards].map(cardToSolverFormat);
     const solved = Hand.solve(allCards);
-    results.push({ playerId: p.id, hand: solved, name: solved.name });
+    results.push({ playerId: p.id, hand: solved, name: solved.descr });
   }
   return results;
 }
@@ -586,22 +586,6 @@ function showdown(room) {
 }
 
 function prepareNextHand(room) {
-  // Delay busted notification so players see the result first
-  const busted = room.players.filter(p => p.chips <= 0);
-  if (busted.length > 0) {
-    setTimeout(() => {
-      for (const p of busted) {
-        io.to(p.id).emit('busted');
-        const sock = io.sockets.sockets.get(p.id);
-        if (sock) {
-          sock.leave(room.id);
-          playerSockets.delete(p.id);
-        }
-      }
-    }, 3000);
-  }
-  room.players = room.players.filter(p => p.chips > 0);
-
   // Reset ready and spectator for all players
   room.players.forEach(p => {
     p.ready = false;
@@ -695,10 +679,6 @@ function syncChips(room) {
     const rp = room.players.find(p => p.id === gp.id);
     if (rp) rp.chips = gp.chips;
   }
-  // Remove busted players
-  room.players.forEach(p => {
-    if (p.chips <= 0) p.chips = 0;
-  });
 }
 
 // ============================================

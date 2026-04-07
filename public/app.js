@@ -575,19 +575,6 @@ function closeResult() {
   document.getElementById('result-overlay').style.display = 'none';
 }
 
-socket.on('busted', () => {
-  stopTimer();
-  closeResult();
-  myId = null;
-  myRoomId = null;
-  currentRoom = null;
-  currentGame = null;
-  isReady = false;
-  isSpectator = false;
-  showScreen('lobby-screen');
-  alert('Ban da het chips! Tu dong roi khoi ban.');
-});
-
 // Spectator mode
 socket.on('spectatorMode', () => {
   isSpectator = true;
