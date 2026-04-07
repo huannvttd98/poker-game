@@ -348,7 +348,7 @@ button:active { transform: scale(0.96); opacity: 0.9; }
 #game-screen { flex-direction: column; position: relative; overflow: hidden; background: var(--bg); }
 
 /* Exit + Log buttons */
-.btn-exit-game, .btn-toggle-log {
+.btn-exit-game, .btn-toggle-log, .btn-toggle-chat {
   position: absolute; z-index: 10;
   background: var(--panel); backdrop-filter: blur(10px);
   color: var(--muted); padding: 7px 14px; font-size: 0.7rem;
@@ -356,7 +356,8 @@ button:active { transform: scale(0.96); opacity: 0.9; }
   top: 12px;
 }
 .btn-exit-game { left: 12px; }
-.btn-toggle-log { left: 72px; }
+.btn-toggle-chat { left: 72px; position: relative; }
+.btn-toggle-log { left: 132px; }
 
 /* Action Log */
 .action-log {
@@ -383,6 +384,87 @@ button:active { transform: scale(0.96); opacity: 0.9; }
 .log-entry.log-call .log-action { color: var(--blue); }
 .log-entry.log-raise .log-action { color: var(--orange); }
 .log-entry.log-allin .log-action { color: var(--red); }
+
+/* Chat Panel */
+.chat-panel {
+  position: absolute; top: 44px; right: 10px; z-index: 15;
+  width: 220px; max-height: 45vh;
+  background: var(--panel); backdrop-filter: blur(14px);
+  border: 1px solid var(--glass-border); border-radius: var(--radius);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.chat-header {
+  padding: 8px 12px; font-size: 0.7rem; font-weight: 700;
+  color: var(--gold); text-transform: uppercase; letter-spacing: 1.5px;
+  border-bottom: 1px solid var(--glass-border);
+}
+.chat-badge {
+  background: var(--red); color: #fff; font-size: 0.55rem;
+  padding: 1px 5px; border-radius: 8px; margin-left: 6px;
+  vertical-align: middle; font-weight: 700;
+}
+.chat-messages {
+  flex: 1; overflow-y: auto; padding: 6px 8px;
+  display: flex; flex-direction: column; gap: 4px;
+  min-height: 80px;
+}
+.chat-msg {
+  display: flex; align-items: flex-start; gap: 5px;
+}
+.chat-msg-me { flex-direction: row-reverse; }
+.chat-avatar { font-size: 0.9rem; flex-shrink: 0; }
+.chat-bubble {
+  background: rgba(255,255,255,0.07); border-radius: 8px;
+  padding: 4px 8px; max-width: 160px; word-break: break-word;
+}
+.chat-msg-me .chat-bubble { background: rgba(74,222,128,0.12); }
+.chat-name {
+  display: block; font-size: 0.55rem; font-weight: 700;
+  color: var(--gold); margin-bottom: 1px;
+}
+.chat-msg-me .chat-name { text-align: right; }
+.chat-text { font-size: 0.65rem; color: var(--text); line-height: 1.4; }
+.chat-input-row {
+  display: flex; border-top: 1px solid var(--glass-border);
+}
+.chat-input-row input {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: var(--text); padding: 7px 10px; font-size: 0.65rem;
+}
+.chat-input-row button {
+  background: var(--green); color: #000; border: none;
+  padding: 7px 12px; font-size: 0.65rem; font-weight: 700;
+  cursor: pointer;
+}
+.chat-input-row button:hover { opacity: 0.85; }
+
+/* Chat Toast Notifications */
+.chat-toast-container {
+  position: absolute; top: 44px; right: 10px; z-index: 14;
+  display: flex; flex-direction: column; gap: 6px;
+  pointer-events: none; width: 220px;
+}
+.chat-toast {
+  display: flex; align-items: flex-start; gap: 6px;
+  background: var(--panel); backdrop-filter: blur(14px);
+  border: 1px solid var(--glass-border); border-radius: 10px;
+  padding: 8px 10px; pointer-events: auto; cursor: pointer;
+  animation: chatToastIn 0.3s ease;
+  transition: opacity 0.4s, transform 0.4s;
+}
+.chat-toast-hide { opacity: 0; transform: translateX(30px); }
+.chat-toast-avatar { font-size: 1rem; flex-shrink: 0; }
+.chat-toast-body { display: flex; flex-direction: column; min-width: 0; }
+.chat-toast-name { font-size: 0.55rem; font-weight: 700; color: var(--gold); }
+.chat-toast-text {
+  font-size: 0.65rem; color: var(--text); line-height: 1.4;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+@keyframes chatToastIn {
+  from { opacity: 0; transform: translateX(30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
 .log-entry.log-check .log-action { color: var(--green); }
 
 /* ============================================
@@ -409,6 +491,9 @@ button:active { transform: scale(0.96); opacity: 0.9; }
   position: relative; flex-shrink: 0;
 }
 .community-cards { display: flex; gap: 4px; margin-bottom: 6px; flex-wrap: nowrap; }
+.pot-wrapper {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
 .pot-display {
   color: var(--gold); font-size: 1rem; font-weight: 800;
   text-shadow: 0 2px 8px rgba(0,0,0,0.5);

@@ -778,23 +778,27 @@ io.on('connection', (socket) => {
     const player = addPlayer(room, playerId, playerName, chips, avatar);
     if (!player) return callback({ error: 'Room is full or already joined' });
 
-    const isSpectator = room.status === 'playing' || room.status === 'waiting_next';
-    if (isSpectator) player.spectator = true;
+    const isPlaying = room.status === 'playing';
+    const isWaitingNext = room.status === 'waiting_next';
+
+    if (isPlaying) {
+      player.spectator = true;
+    }
 
     playerSockets.set(socket.id, { roomId, playerId });
     socket.join(roomId);
-    callback({ success: true, roomId, playerId, spectator: isSpectator });
+    callback({ success: true, roomId, playerId, spectator: isPlaying, waitingNext: isWaitingNext });
     io.to(roomId).emit('roomUpdate', getRoomState(room));
 
     // Send current game state to spectator
-    if (isSpectator && room.game) {
+    if (isPlaying && room.game) {
       socket.emit('gameUpdate', getGameStateForPlayer(room, playerId));
       socket.emit('spectatorMode');
     }
 
     broadcastRoomList();
-    writeLog('ROOM_JOIN', { roomId, player: playerName, chips: clampChips(chips), spectator: isSpectator });
-    console.log(`[Room] ${playerName} joined room ${roomId}${isSpectator ? ' (spectator)' : ''}`);
+    writeLog('ROOM_JOIN', { roomId, player: playerName, chips: clampChips(chips), spectator: isPlaying });
+    console.log(`[Room] ${playerName} joined room ${roomId}${isPlaying ? ' (spectator)' : ''}`);
   });
 
   // Toggle ready
@@ -855,6 +859,28 @@ io.on('connection', (socket) => {
       io.to(room.id).emit('roomUpdate', getRoomState(room));
       io.to(room.id).emit('handFinished', result.result);
     }
+  });
+
+  // Chat message
+  socket.on('chatMessage', (msg, callback) => {
+    const info = playerSockets.get(socket.id);
+    if (!info) return callback?.({ error: 'Not in a room' });
+    const room = getRoom(info.roomId);
+    if (!room) return callback?.({ error: 'Room not found' });
+    const player = room.players.find(p => p.id === info.playerId);
+    if (!player) return callback?.({ error: 'Player not found' });
+
+    const text = (msg || '').toString().trim().slice(0, 200);
+    if (!text) return callback?.({ error: 'Empty message' });
+
+    io.to(room.id).emit('chatMessage', {
+      playerId: player.id,
+      name: player.name,
+      avatar: player.avatar || '😎',
+      text,
+      time: Date.now()
+    });
+    callback?.({ success: true });
   });
 
   // Leave room

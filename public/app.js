@@ -5,6 +5,7 @@ let myRoomId = null;
 let currentRoom = null;
 let currentGame = null;
 let isReady = false;
+let isSpectator = false;
 
 // Player profile
 let myProfile = {
@@ -100,8 +101,11 @@ function joinRoom() {
     myId = res.playerId;
     myRoomId = res.roomId;
     if (res.spectator) {
+      isSpectator = true;
       showScreen('game-screen');
+      updateSpectatorBar();
     } else {
+      isSpectator = false;
       showScreen('room-screen');
     }
   });
@@ -115,6 +119,7 @@ function exitGame() {
   currentRoom = null;
   currentGame = null;
   isReady = false;
+  isSpectator = false;
   stopTimer();
   closeResult();
   showScreen('lobby-screen');
@@ -127,6 +132,7 @@ function leaveRoom() {
   currentRoom = null;
   currentGame = null;
   isReady = false;
+  isSpectator = false;
   showScreen('lobby-screen');
 }
 
@@ -179,8 +185,11 @@ function quickJoin(roomId) {
     myId = res.playerId;
     myRoomId = res.roomId;
     if (res.spectator) {
+      isSpectator = true;
       showScreen('game-screen');
+      updateSpectatorBar();
     } else {
+      isSpectator = false;
       showScreen('room-screen');
     }
   });
@@ -192,6 +201,12 @@ function quickJoin(roomId) {
 socket.on('roomUpdate', (room) => {
   currentRoom = room;
   document.getElementById('room-id-display').textContent = room.name ? `${room.name} (${room.id})` : room.id;
+
+  // Track spectator state from server
+  const me = room.players.find(p => p.id === myId);
+  if (me) {
+    isSpectator = !!me.spectator;
+  }
 
   // Player list
   const listEl = document.getElementById('player-list');
@@ -234,6 +249,8 @@ socket.on('roomUpdate', (room) => {
       ).join('') + `<div class="ready-count">${readyCount}/${total} ready</div>`;
     }
   }
+
+  updateSpectatorBar();
 });
 
 // ============================================
@@ -643,6 +660,110 @@ function renderLog(log) {
 
   list.scrollTop = list.scrollHeight;
 }
+
+// ============================================
+// CHAT
+// ============================================
+let chatOpen = false;
+let unreadChat = 0;
+
+function toggleChat() {
+  const el = document.getElementById('chat-panel');
+  chatOpen = !chatOpen;
+  el.style.display = chatOpen ? 'flex' : 'none';
+  if (chatOpen) {
+    unreadChat = 0;
+    updateChatBadge();
+    document.getElementById('chat-input').focus();
+  }
+}
+
+function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  socket.emit('chatMessage', text, (res) => {
+    if (res?.error) console.error(res.error);
+  });
+  input.value = '';
+}
+
+function updateChatBadge() {
+  const badge = document.getElementById('chat-badge');
+  if (!badge) return;
+  if (unreadChat > 0 && !chatOpen) {
+    badge.style.display = 'inline-block';
+    badge.textContent = unreadChat > 99 ? '99+' : unreadChat;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+socket.on('chatMessage', (msg) => {
+  const list = document.getElementById('chat-messages');
+  if (!list) return;
+
+  const isMe = msg.playerId === myId;
+  const div = document.createElement('div');
+  div.className = 'chat-msg' + (isMe ? ' chat-msg-me' : '');
+  div.innerHTML =
+    `<span class="chat-avatar">${msg.avatar}</span>` +
+    `<div class="chat-bubble">` +
+      `<span class="chat-name">${esc(msg.name)}</span>` +
+      `<span class="chat-text">${esc(msg.text)}</span>` +
+    `</div>`;
+  list.appendChild(div);
+  list.scrollTop = list.scrollHeight;
+
+  if (!chatOpen) {
+    unreadChat++;
+    updateChatBadge();
+    if (!isMe) showChatToast(msg);
+  }
+});
+
+let chatToastTimer = null;
+function showChatToast(msg) {
+  let container = document.getElementById('chat-toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'chat-toast-container';
+    container.className = 'chat-toast-container';
+    document.getElementById('game-screen').appendChild(container);
+  }
+
+  const toast = document.createElement('div');
+  toast.className = 'chat-toast';
+  toast.innerHTML =
+    `<span class="chat-toast-avatar">${msg.avatar}</span>` +
+    `<div class="chat-toast-body">` +
+      `<span class="chat-toast-name">${esc(msg.name)}</span>` +
+      `<span class="chat-toast-text">${esc(msg.text)}</span>` +
+    `</div>`;
+  toast.addEventListener('click', () => {
+    toast.remove();
+    if (!chatOpen) toggleChat();
+  });
+
+  container.appendChild(toast);
+
+  // Auto remove after 4s
+  setTimeout(() => {
+    toast.classList.add('chat-toast-hide');
+    setTimeout(() => toast.remove(), 400);
+  }, 4000);
+
+  // Keep max 3 toasts
+  while (container.children.length > 3) {
+    container.firstChild.remove();
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && document.activeElement === document.getElementById('chat-input')) {
+    sendChat();
+  }
+});
 
 // ============================================
 // HELP

@@ -9,26 +9,11 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Poker LAN</title>
-    <link rel="stylesheet" href="style.css?v=2.3" />
+    <link rel="stylesheet" href="style.css?v=2.4" />
   </head>
   <body>
-    <!-- TOP BAR: Timer + Help -->
+    <!-- TOP BAR: Help -->
     <div class="top-bar">
-      <div id="global-timer" class="global-timer" style="display: none">
-        <svg width="36" height="36" viewBox="0 0 36 36">
-          <circle class="gt-ring-bg" cx="18" cy="18" r="15" />
-          <circle
-            class="gt-ring-fg"
-            id="gt-ring-fg"
-            cx="18"
-            cy="18"
-            r="15"
-            stroke-dasharray="94.25"
-            stroke-dashoffset="0"
-          />
-        </svg>
-        <span class="gt-text" id="gt-text">30</span>
-      </div>
       <button class="btn-help" onclick="toggleHelp()">?</button>
     </div>
 
@@ -350,7 +335,16 @@
     <!-- GAME SCREEN -->
     <div id="game-screen" class="screen">
       <button class="btn-exit-game" onclick="exitGame()">Exit</button>
+      <button class="btn-toggle-chat" onclick="toggleChat()">Chat</button>
       <button class="btn-toggle-log" onclick="toggleLog()">Log</button>
+      <div id="chat-panel" class="chat-panel" style="display:none">
+        <div class="chat-header">Chat <span id="chat-badge" class="chat-badge" style="display:none">0</span></div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-row">
+          <input type="text" id="chat-input" placeholder="Nhan tin..." maxlength="200" autocomplete="off" />
+          <button id="btn-chat-send" onclick="sendChat()">Send</button>
+        </div>
+      </div>
       <div id="action-log" class="action-log" style="display:none">
         <div class="action-log-header">Action Log</div>
         <div id="action-log-list" class="action-log-list"></div>
@@ -358,7 +352,24 @@
       <div class="poker-table">
         <div class="table-surface">
           <div id="community-cards" class="community-cards"></div>
-          <div id="pot-display" class="pot-display">Pot: 0</div>
+          <div class="pot-wrapper">
+            <div id="global-timer" class="global-timer" style="display: none">
+              <svg width="36" height="36" viewBox="0 0 36 36">
+                <circle class="gt-ring-bg" cx="18" cy="18" r="15" />
+                <circle
+                  class="gt-ring-fg"
+                  id="gt-ring-fg"
+                  cx="18"
+                  cy="18"
+                  r="15"
+                  stroke-dasharray="94.25"
+                  stroke-dashoffset="0"
+                />
+              </svg>
+              <span class="gt-text" id="gt-text">30</span>
+            </div>
+            <div id="pot-display" class="pot-display">Pot: 0</div>
+          </div>
           <div id="stage-display" class="stage-display"></div>
         </div>
         <div id="seats" class="seats"></div>
@@ -411,7 +422,7 @@
       </div>
     </div>
 
-    <script src="/socket.io/socket.io.js?v=2.3"></script>
-    <script src="app.js?v=2.3"></script>
+    <script src="/socket.io/socket.io.js?v=2.4"></script>
+    <script src="app.js?v=2.4"></script>
   </body>
 </html>
