@@ -34,8 +34,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ============================================
 const rooms = new Map();
 const playerSockets = new Map(); // socketId -> { roomId, playerId }
-const TURN_TIME = 30; // seconds per turn
+const TURN_TIME = 18; // seconds per turn
 const NEXT_HAND_DELAY = 5000; // 5s delay between hands
+const READY_TIMEOUT = 10; // seconds to ready up before auto-skip
 
 // ============================================
 // POKER UTILS
@@ -609,8 +610,55 @@ function prepareNextHand(room) {
 
   room.status = 'waiting_next';
 
+  // Start ready countdown
+  const deadline = Date.now() + READY_TIMEOUT * 1000;
+  room._readyDeadline = deadline;
+  clearReadyTimer(room);
+  room._readyTimer = setTimeout(() => {
+    autoStartWithReady(room);
+  }, READY_TIMEOUT * 1000);
+
+  io.to(room.id).emit('readyCountdown', { deadline, timeout: READY_TIMEOUT });
   io.to(room.id).emit('roomUpdate', getRoomState(room));
   broadcastRoomList();
+}
+
+function clearReadyTimer(room) {
+  if (room._readyTimer) {
+    clearTimeout(room._readyTimer);
+    room._readyTimer = null;
+  }
+  room._readyDeadline = null;
+}
+
+function autoStartWithReady(room) {
+  if (room.status !== 'waiting_next') return;
+  clearReadyTimer(room);
+
+  const readyPlayers = room.players.filter(p => p.ready);
+
+  // Mark unready players as spectators
+  room.players.forEach(p => {
+    if (!p.ready) p.spectator = true;
+  });
+
+  if (readyPlayers.length < 2) {
+    // Not enough ready players - go back to lobby
+    room.status = 'waiting';
+    room.game = null;
+    room.players.forEach(p => { p.ready = false; p.spectator = false; });
+    io.to(room.id).emit('roomUpdate', getRoomState(room));
+    io.to(room.id).emit('backToLobby');
+    broadcastRoomList();
+    return;
+  }
+
+  if (!startGame(room)) return;
+
+  io.to(room.id).emit('roomUpdate', getRoomState(room));
+  broadcastGameState(room);
+  writeLog('GAME_START', { roomId: room.id, autoStart: true, players: room.game.players.map(p => ({ name: p.name, chips: p.chips })) });
+  console.log(`[Game] Auto-start in room ${room.id} (${readyPlayers.length} ready)`);
 }
 
 function checkAllReadyAndStart(room) {
@@ -618,6 +666,8 @@ function checkAllReadyAndStart(room) {
 
   const allReady = room.players.every(p => p.ready);
   if (!allReady) return;
+
+  clearReadyTimer(room);
 
   // Not enough players - go back to lobby
   if (room.players.length < 2) {
@@ -859,6 +909,37 @@ io.on('connection', (socket) => {
       io.to(room.id).emit('roomUpdate', getRoomState(room));
       io.to(room.id).emit('handFinished', result.result);
     }
+  });
+
+  // Kick player (host only)
+  socket.on('kickPlayer', (targetId, callback) => {
+    const info = playerSockets.get(socket.id);
+    if (!info) return callback?.({ error: 'Not in a room' });
+    const room = getRoom(info.roomId);
+    if (!room) return callback?.({ error: 'Room not found' });
+    if (room.hostId !== socket.id) return callback?.({ error: 'Only host can kick' });
+    if (targetId === socket.id) return callback?.({ error: 'Cannot kick yourself' });
+
+    const target = room.players.find(p => p.id === targetId);
+    if (!target) return callback?.({ error: 'Player not found' });
+
+    // Notify the kicked player
+    io.to(targetId).emit('kicked');
+
+    // Remove from room
+    const targetSock = io.sockets.sockets.get(targetId);
+    if (targetSock) targetSock.leave(room.id);
+    playerSockets.delete(targetId);
+    removePlayer(room, targetId);
+
+    callback?.({ success: true });
+
+    if (rooms.has(room.id)) {
+      io.to(room.id).emit('roomUpdate', getRoomState(room));
+    }
+    broadcastRoomList();
+    writeLog('KICK', { roomId: room.id, kicked: target.name, by: info.playerId });
+    console.log(`[Room] ${target.name} kicked from room ${room.id}`);
   });
 
   // Chat message

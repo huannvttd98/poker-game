@@ -209,12 +209,14 @@ socket.on('roomUpdate', (room) => {
   }
 
   // Player list
+  const iAmHost = room.hostId === myId;
   const listEl = document.getElementById('player-list');
   listEl.innerHTML = room.players.map(p => {
     const isHost = p.id === room.hostId;
     const classes = ['player-card'];
     if (p.ready) classes.push('ready');
     if (isHost) classes.push('host');
+    const kickBtn = (iAmHost && !isHost) ? `<button class="btn-kick" onclick="kickPlayer('${p.id}')">Kick</button>` : '';
     return `
       <div class="${classes.join(' ')}">
         <div class="player-avatar-small">${p.avatar || '😎'}</div>
@@ -223,6 +225,7 @@ socket.on('roomUpdate', (room) => {
         ${p.ready ? '<div class="player-status">Ready</div>' : ''}
         ${p.spectator ? '<div class="player-status" style="color:#ff9800">Watching</div>' : ''}
         ${!p.connected ? '<div class="player-status" style="color:#e94560">Disconnected</div>' : ''}
+        ${kickBtn}
       </div>
     `;
   }).join('');
@@ -234,6 +237,7 @@ socket.on('roomUpdate', (room) => {
 
   // If game started, switch to game screen and close result overlay
   if (room.status === 'playing') {
+    stopReadyCountdown();
     closeResult();
     showScreen('game-screen');
   }
@@ -540,7 +544,34 @@ socket.on('handFinished', (result) => {
   overlay.style.display = 'flex';
 });
 
+// ============================================
+// READY COUNTDOWN
+// ============================================
+let readyCountdownInterval = null;
+
+socket.on('readyCountdown', ({ deadline }) => {
+  stopReadyCountdown();
+  readyCountdownInterval = setInterval(() => {
+    const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    const el = document.getElementById('ready-countdown');
+    if (el) {
+      el.textContent = remaining > 0 ? `Tu dong bat dau sau ${remaining}s` : '';
+    }
+    if (remaining <= 0) stopReadyCountdown();
+  }, 250);
+});
+
+function stopReadyCountdown() {
+  if (readyCountdownInterval) {
+    clearInterval(readyCountdownInterval);
+    readyCountdownInterval = null;
+  }
+  const el = document.getElementById('ready-countdown');
+  if (el) el.textContent = '';
+}
+
 function closeResult() {
+  stopReadyCountdown();
   document.getElementById('result-overlay').style.display = 'none';
 }
 
@@ -562,6 +593,29 @@ socket.on('spectatorMode', () => {
   isSpectator = true;
   showScreen('game-screen');
   updateSpectatorBar();
+});
+
+// Kick player (host only)
+function kickPlayer(targetId) {
+  const target = currentRoom?.players.find(p => p.id === targetId);
+  const name = target?.name || 'player';
+  if (!confirm(`Kick ${name} khoi phong?`)) return;
+  socket.emit('kickPlayer', targetId, (res) => {
+    if (res?.error) alert(res.error);
+  });
+}
+
+socket.on('kicked', () => {
+  myId = null;
+  myRoomId = null;
+  currentRoom = null;
+  currentGame = null;
+  isReady = false;
+  isSpectator = false;
+  stopTimer();
+  closeResult();
+  showScreen('lobby-screen');
+  alert('Ban da bi chu phong kick!');
 });
 
 socket.on('backToLobby', () => {

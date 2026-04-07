@@ -750,6 +750,14 @@ button:active {
   color: var(--red);
   font-size: 0.65rem;
 }
+.btn-kick {
+  margin-top: 6px; padding: 4px 12px;
+  background: transparent; color: var(--red);
+  border: 1px solid var(--red); border-radius: 6px;
+  font-size: 0.65rem; font-weight: 600; cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.btn-kick:hover { background: var(--red); color: #fff; }
 
 .room-actions {
   display: flex;
@@ -1620,6 +1628,11 @@ button:active {
   font-weight: 600;
 }
 
+.ready-countdown {
+  margin-top: 10px; font-size: 0.8rem; font-weight: 700;
+  color: var(--orange); letter-spacing: 0.5px;
+  min-height: 1.2em;
+}
 .ready-status {
   margin-top: 14px;
   display: flex;

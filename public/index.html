@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Poker LAN</title>
-    <link rel="stylesheet" href="style.css?v=2.5" />
+    <link rel="stylesheet" href="style.css?v=2.7" />
   </head>
   <body>
     <!-- TOP BAR: Help -->
@@ -417,13 +417,14 @@
         <div class="result-content">
           <h2 id="result-text"></h2>
           <div id="result-details"></div>
+          <div id="ready-countdown" class="ready-countdown"></div>
           <div id="ready-status" class="ready-status"></div>
           <button id="btn-ready-next" onclick="readyNextHand()">Ready</button>
         </div>
       </div>
     </div>
 
-    <script src="/socket.io/socket.io.js?v=2.5"></script>
-    <script src="app.js?v=2.5"></script>
+    <script src="/socket.io/socket.io.js?v=2.7"></script>
+    <script src="app.js?v=2.7"></script>
   </body>
 </html>
