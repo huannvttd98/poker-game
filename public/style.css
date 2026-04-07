@@ -465,6 +465,25 @@ button:active { transform: scale(0.96); opacity: 0.9; }
   from { opacity: 0; transform: translateX(30px); }
   to { opacity: 1; transform: translateX(0); }
 }
+
+/* Spectator Bar */
+.spectator-bar {
+  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 20; display: flex; align-items: center; gap: 10px;
+  background: rgba(255,152,0,0.12); backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,152,0,0.3); border-radius: 12px;
+  padding: 8px 18px; white-space: nowrap;
+}
+.spectator-label {
+  color: #ff9800; font-size: 0.75rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+.btn-join-next {
+  background: var(--green); color: #000; border: none;
+  padding: 7px 16px; border-radius: 8px; font-size: 0.75rem;
+  font-weight: 700; cursor: pointer; transition: opacity 0.2s;
+}
+.btn-join-next:hover { opacity: 0.85; }
 .log-entry.log-check .log-action { color: var(--green); }
 
 /* ============================================

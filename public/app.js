@@ -530,7 +530,7 @@ socket.on('handFinished', (result) => {
 
   // Reset ready button
   const btnReady = document.getElementById('btn-ready-next');
-  btnReady.textContent = 'Ready';
+  btnReady.textContent = isSpectator ? 'Join & Ready' : 'Ready';
   btnReady.disabled = false;
   btnReady.classList.remove('btn-waiting');
 
@@ -552,17 +552,21 @@ socket.on('busted', () => {
   currentRoom = null;
   currentGame = null;
   isReady = false;
+  isSpectator = false;
   showScreen('lobby-screen');
   alert('Ban da het chips! Tu dong roi khoi ban.');
 });
 
 // Spectator mode
 socket.on('spectatorMode', () => {
+  isSpectator = true;
   showScreen('game-screen');
+  updateSpectatorBar();
 });
 
 socket.on('backToLobby', () => {
   closeResult();
+  isSpectator = false;
   showScreen('room-screen');
 });
 
@@ -572,6 +576,34 @@ function readyNextHand() {
   btn.textContent = 'Waiting...';
   btn.disabled = true;
   btn.classList.add('btn-waiting');
+  if (isSpectator) {
+    isSpectator = false;
+    updateSpectatorBar();
+  }
+}
+
+// ============================================
+// SPECTATOR BAR
+// ============================================
+function updateSpectatorBar() {
+  const bar = document.getElementById('spectator-bar');
+  if (!bar) return;
+
+  if (isSpectator) {
+    bar.style.display = 'flex';
+    bar.innerHTML = `
+      <span class="spectator-label">Dang xem</span>
+      <button class="btn-join-next" onclick="joinNextHand()">Tham gia van sau</button>
+    `;
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function joinNextHand() {
+  socket.emit('toggleReady');
+  isSpectator = false;
+  updateSpectatorBar();
 }
 
 // ============================================
