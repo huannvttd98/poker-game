@@ -10,7 +10,7 @@ let isSpectator = false;
 // Player profile
 let myProfile = {
   name: '',
-  chips: 1000,
+  chips: 5000,
   avatar: '😎'
 };
 
@@ -48,12 +48,10 @@ function selectAvatar(emoji) {
 
 function enterLobby() {
   const name = document.getElementById('player-name').value.trim();
-  if (!name) return alert('Enter your name');
-  const chipsVal = parseInt(document.getElementById('player-chips').value);
-  const chips = Math.max(100, Math.min(10000, isNaN(chipsVal) ? 1000 : chipsVal));
+  if (!name) return showModal('Nhap ten cua ban');
 
   myProfile.name = name;
-  myProfile.chips = chips;
+  myProfile.chips = 5000;
 
   renderProfileCard();
   showScreen('lobby-screen');
@@ -72,7 +70,6 @@ function renderProfileCard() {
 
 function editProfile() {
   document.getElementById('player-name').value = myProfile.name;
-  document.getElementById('player-chips').value = myProfile.chips;
   selectAvatar(myProfile.avatar);
   showScreen('profile-screen');
 }
@@ -86,7 +83,7 @@ initAvatarPicker();
 function createRoom() {
   const roomName = document.getElementById('room-name').value.trim() || '';
   socket.emit('createRoom', { playerName: myProfile.name, chips: myProfile.chips, avatar: myProfile.avatar, roomName }, (res) => {
-    if (res.error) return alert(res.error);
+    if (res.error) return showModal(res.error);
     myId = res.playerId;
     myRoomId = res.roomId;
     showScreen('room-screen');
@@ -95,9 +92,9 @@ function createRoom() {
 
 function joinRoom() {
   const code = document.getElementById('room-code').value.trim().toUpperCase();
-  if (!code) return alert('Enter room code');
+  if (!code) return showModal('Nhap ma phong');
   socket.emit('joinRoom', { roomId: code, playerName: myProfile.name, chips: myProfile.chips, avatar: myProfile.avatar }, (res) => {
-    if (res.error) return alert(res.error);
+    if (res.error) return showModal(res.error);
     myId = res.playerId;
     myRoomId = res.roomId;
     if (res.spectator) {
@@ -111,8 +108,9 @@ function joinRoom() {
   });
 }
 
-function exitGame() {
-  if (!confirm('Thoat khoi ban? Ban se mat het chips da dat.')) return;
+async function exitGame() {
+  const ok = await showModal('Thoat khoi ban? Ban se mat het chips da dat.', { confirm: true });
+  if (!ok) return;
   socket.emit('leaveRoom');
   myId = null;
   myRoomId = null;
@@ -146,7 +144,7 @@ function toggleReady() {
 
 function startGame() {
   socket.emit('startGame', null, (res) => {
-    if (res?.error) alert(res.error);
+    if (res?.error) showModal(res.error);
   });
 }
 
@@ -181,7 +179,7 @@ socket.on('roomList', (roomList) => {
 
 function quickJoin(roomId) {
   socket.emit('joinRoom', { roomId, playerName: myProfile.name, chips: myProfile.chips, avatar: myProfile.avatar }, (res) => {
-    if (res.error) return alert(res.error);
+    if (res.error) return showModal(res.error);
     myId = res.playerId;
     myRoomId = res.roomId;
     if (res.spectator) {
@@ -201,6 +199,8 @@ function quickJoin(roomId) {
 socket.on('roomUpdate', (room) => {
   currentRoom = room;
   document.getElementById('room-id-display').textContent = room.name ? `${room.name} (${room.id})` : room.id;
+  const sidebarLabel = document.getElementById('sidebar-room-label');
+  if (sidebarLabel) sidebarLabel.textContent = room.name || room.id;
 
   // Track spectator state from server
   const me = room.players.find(p => p.id === myId);
@@ -255,6 +255,7 @@ socket.on('roomUpdate', (room) => {
   }
 
   updateSpectatorBar();
+  renderRankList();
 });
 
 // ============================================
@@ -264,6 +265,7 @@ socket.on('gameUpdate', (game) => {
   currentGame = game;
   showScreen('game-screen');
   renderGame(game);
+  renderRankList();
 });
 
 // Seat positions around the poker-table area (percentages)
@@ -473,7 +475,7 @@ function doAction(action) {
     amount = parseInt(document.getElementById('raise-input').value) || parseInt(document.getElementById('raise-slider').value);
   }
   socket.emit('action', { action, amount }, (res) => {
-    if (res?.error) alert(res.error);
+    if (res?.error) showModal(res.error);
   });
 }
 
@@ -516,7 +518,7 @@ socket.on('handFinished', (result) => {
       .map(p => {
         const isWinner = result.winners.some(w => w.playerId === p.id);
         const handName = result.hands?.[p.id] || '';
-        const winAmount = result.winners.find(w => w.playerId === p.id)?.amount || 0;
+        const winAmount = result.winners.filter(w => w.playerId === p.id).reduce((s, w) => s + w.amount, 0);
         return `
           <div class="result-player-hand ${isWinner ? 'is-winner' : 'is-loser'}">
             <div class="result-player-info">
@@ -583,12 +585,13 @@ socket.on('spectatorMode', () => {
 });
 
 // Kick player (host only)
-function kickPlayer(targetId) {
+async function kickPlayer(targetId) {
   const target = currentRoom?.players.find(p => p.id === targetId);
   const name = target?.name || 'player';
-  if (!confirm(`Kick ${name} khoi phong?`)) return;
+  const ok = await showModal(`Kick ${name} khoi phong?`, { confirm: true });
+  if (!ok) return;
   socket.emit('kickPlayer', targetId, (res) => {
-    if (res?.error) alert(res.error);
+    if (res?.error) showModal(res.error);
   });
 }
 
@@ -602,14 +605,55 @@ socket.on('kicked', () => {
   stopTimer();
   closeResult();
   showScreen('lobby-screen');
-  alert('Ban da bi chu phong kick!');
+  showModal('Ban da bi chu phong kick!');
 });
 
 socket.on('backToLobby', () => {
   closeResult();
+  closeGameWon();
   isSpectator = false;
   showScreen('room-screen');
 });
+
+// ============================================
+// GAME WON
+// ============================================
+socket.on('gameWon', (data) => {
+  stopTimer();
+  stopReadyCountdown();
+  closeResult();
+
+  const overlay = document.getElementById('game-won-overlay');
+  const isMe = data.winner.id === myId;
+
+  let rankHtml = data.rankings.map((p, i) => {
+    const medals = ['&#9812;', '&#9813;', '&#9814;'];
+    const icon = medals[i] || (i + 1);
+    const cls = i === 0 ? 'gw-gold' : i === 1 ? 'gw-silver' : i === 2 ? 'gw-bronze' : '';
+    return `<div class="gw-rank-item ${cls}">
+      <span class="gw-rank-pos">${icon}</span>
+      <span class="gw-rank-avatar">${p.avatar || '😎'}</span>
+      <span class="gw-rank-name">${esc(p.name)}</span>
+      <span class="gw-rank-chips">${p.chips}</span>
+    </div>`;
+  }).join('');
+
+  overlay.innerHTML = `
+    <div class="gw-content">
+      <div class="gw-title">${isMe ? 'Ban da thang!' : `${esc(data.winner.name)} thang cuoc!`}</div>
+      <div class="gw-winner-avatar">${data.winner.avatar || '😎'}</div>
+      <div class="gw-winner-name">${esc(data.winner.name)}</div>
+      <div class="gw-winner-chips">${data.winner.chips} chips</div>
+      <div class="gw-rankings">${rankHtml}</div>
+      <div class="gw-note">Tro ve phong sau vai giay...</div>
+    </div>`;
+  overlay.style.display = 'flex';
+});
+
+function closeGameWon() {
+  const el = document.getElementById('game-won-overlay');
+  if (el) el.style.display = 'none';
+}
 
 function readyNextHand() {
   socket.emit('toggleReady');
@@ -648,12 +692,92 @@ function joinNextHand() {
 }
 
 // ============================================
+// RANK LIST
+// ============================================
+function renderRankList() {
+  const el = document.getElementById('rank-list');
+  if (!el) return;
+
+  const players = currentRoom?.players;
+  if (!players || players.length === 0) {
+    el.innerHTML = '<div class="rank-empty">Chua co nguoi choi</div>';
+    return;
+  }
+
+  const sorted = [...players].sort((a, b) => b.chips - a.chips);
+  const totalChips = players.reduce((s, p) => s + p.chips, 0);
+  const winTarget = Math.ceil(totalChips * 4 / 5);
+  const leader = sorted[0];
+  const pct = totalChips > 0 ? Math.min(100, Math.round(leader.chips / winTarget * 100)) : 0;
+
+  const medals = ['gold', 'silver', 'bronze'];
+
+  let html = `<div class="rank-progress">
+    <div class="rank-progress-header">
+      <span class="rank-progress-leader">${leader.avatar || '😎'} ${esc(leader.name)}</span>
+      <span class="rank-progress-pct">${leader.chips} / ${winTarget}</span>
+    </div>
+    <div class="rank-progress-bar">
+      <div class="rank-progress-fill ${pct >= 90 ? 'rank-progress-hot' : ''}" style="width:${pct}%"></div>
+    </div>
+    <div class="rank-progress-label">${pct}% de thang</div>
+  </div>`;
+
+  html += sorted.map((p, i) => {
+    const isMe = p.id === myId;
+    const medal = medals[i] || '';
+    const icon = i === 0 ? '&#9812;' : i === 1 ? '&#9813;' : i === 2 ? '&#9814;' : (i + 1);
+    return `
+      <div class="rank-item ${isMe ? 'rank-me' : ''} ${medal ? 'rank-' + medal : ''}">
+        <span class="rank-pos">${icon}</span>
+        <span class="rank-avatar">${p.avatar || '😎'}</span>
+        <span class="rank-name">${esc(p.name)}</span>
+        <span class="rank-chips">${p.chips}</span>
+      </div>`;
+  }).join('');
+
+  el.innerHTML = html;
+}
+
+// ============================================
 // UTILS
 // ============================================
 function esc(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+// ============================================
+// CUSTOM MODAL (replaces alert/confirm)
+// ============================================
+function showModal(msg, opts = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById('app-modal');
+    const msgEl = document.getElementById('app-modal-msg');
+    const btnsEl = document.getElementById('app-modal-btns');
+    msgEl.textContent = msg;
+
+    if (opts.confirm) {
+      btnsEl.innerHTML =
+        `<button class="btn-modal-cancel" id="modal-cancel">${opts.cancelText || 'Huy'}</button>` +
+        `<button class="btn-modal-ok" id="modal-ok">${opts.okText || 'Dong y'}</button>`;
+    } else {
+      btnsEl.innerHTML =
+        `<button class="btn-modal-ok" id="modal-ok">${opts.okText || 'OK'}</button>`;
+    }
+
+    overlay.style.display = 'flex';
+
+    const close = (val) => {
+      overlay.style.display = 'none';
+      resolve(val);
+    };
+
+    document.getElementById('modal-ok').onclick = () => close(true);
+    const cancelBtn = document.getElementById('modal-cancel');
+    if (cancelBtn) cancelBtn.onclick = () => close(false);
+  });
 }
 
 // ============================================
@@ -711,11 +835,6 @@ function stopTimer() {
 // ============================================
 // ACTION LOG
 // ============================================
-function toggleLog() {
-  const el = document.getElementById('action-log');
-  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
-}
-
 function renderLog(log) {
   const list = document.getElementById('action-log-list');
   if (!list || !log) return;
@@ -735,21 +854,40 @@ function renderLog(log) {
 }
 
 // ============================================
-// CHAT
+// SIDEBAR
 // ============================================
-let chatOpen = false;
-let unreadChat = 0;
+let sidebarOpen = false;
+let currentSidebarTab = 'chat';
 
-function toggleChat() {
-  const el = document.getElementById('chat-panel');
-  chatOpen = !chatOpen;
-  el.style.display = chatOpen ? 'flex' : 'none';
-  if (chatOpen) {
+function toggleSidebar() {
+  const sidebar = document.querySelector('.game-sidebar');
+  sidebarOpen = !sidebarOpen;
+  sidebar.classList.toggle('open', sidebarOpen);
+  if (sidebarOpen && currentSidebarTab === 'chat') {
+    unreadChat = 0;
+    updateChatBadge();
+  }
+}
+
+function switchSidebarTab(tab, btn) {
+  currentSidebarTab = tab;
+  document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.querySelectorAll('.sidebar-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('sidebar-' + tab);
+  if (panel) panel.classList.add('active');
+
+  if (tab === 'chat') {
     unreadChat = 0;
     updateChatBadge();
     document.getElementById('chat-input').focus();
   }
 }
+
+// ============================================
+// CHAT
+// ============================================
+let unreadChat = 0;
 
 function sendChat() {
   const input = document.getElementById('chat-input');
@@ -763,13 +901,28 @@ function sendChat() {
 
 function updateChatBadge() {
   const badge = document.getElementById('chat-badge');
-  if (!badge) return;
-  if (unreadChat > 0 && !chatOpen) {
-    badge.style.display = 'inline-block';
-    badge.textContent = unreadChat > 99 ? '99+' : unreadChat;
-  } else {
-    badge.style.display = 'none';
+  const chatVisible = currentSidebarTab === 'chat';
+  const hasUnread = unreadChat > 0 && !chatVisible;
+
+  // Tab badge
+  if (badge) {
+    if (hasUnread) {
+      badge.style.display = 'inline-block';
+      badge.textContent = unreadChat > 99 ? '99+' : unreadChat;
+      badge.classList.add('chat-badge-pulse');
+    } else {
+      badge.style.display = 'none';
+      badge.classList.remove('chat-badge-pulse');
+    }
   }
+
+  // Chat tab highlight
+  const chatTab = document.querySelector('.sidebar-tab');
+  if (chatTab) chatTab.classList.toggle('has-unread', hasUnread);
+
+  // Mobile hamburger dot
+  const toggleBtn = document.querySelector('.btn-toggle-sidebar');
+  if (toggleBtn) toggleBtn.classList.toggle('has-notif', hasUnread);
 }
 
 socket.on('chatMessage', (msg) => {
@@ -788,7 +941,8 @@ socket.on('chatMessage', (msg) => {
   list.appendChild(div);
   list.scrollTop = list.scrollHeight;
 
-  if (!chatOpen) {
+  const chatVisible = currentSidebarTab === 'chat';
+  if (!chatVisible) {
     unreadChat++;
     updateChatBadge();
     if (!isMe) showChatToast(msg);
@@ -802,7 +956,7 @@ function showChatToast(msg) {
     container = document.createElement('div');
     container.id = 'chat-toast-container';
     container.className = 'chat-toast-container';
-    document.getElementById('game-screen').appendChild(container);
+    document.querySelector('.game-main').appendChild(container);
   }
 
   const toast = document.createElement('div');
@@ -815,7 +969,9 @@ function showChatToast(msg) {
     `</div>`;
   toast.addEventListener('click', () => {
     toast.remove();
-    if (!chatOpen) toggleChat();
+    const chatTab = document.querySelector('.sidebar-tab');
+    switchSidebarTab('chat', chatTab);
+    if (!sidebarOpen && window.innerWidth < 768) toggleSidebar();
   });
 
   container.appendChild(toast);
@@ -843,15 +999,11 @@ document.addEventListener('keydown', (e) => {
 // ============================================
 function toggleHelp() {
   const el = document.getElementById('help-overlay');
-  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+  if (el) el.style.display = el.style.display === 'none' ? 'flex' : 'none';
 }
 
 // Enter key support
 document.getElementById('player-name').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') enterLobby();
-});
-
-document.getElementById('player-chips').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') enterLobby();
 });
 

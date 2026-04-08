@@ -95,8 +95,8 @@ function determineWinners(handResults) {
 // ROOM MANAGEMENT
 // ============================================
 function clampChips(val) {
-  const n = parseInt(val) || 1000;
-  return Math.max(100, Math.min(10000, n));
+  const n = parseInt(val) || 5000;
+  return Math.max(100, Math.min(5000, n));
 }
 
 function createRoom(roomId, hostId, hostName, chips, avatar, roomName) {
@@ -532,6 +532,7 @@ function finishHand(room) {
   room.status = 'waiting';
   writeLog('HAND_END', { roomId: room.id, reason: 'others_folded', winners: result.winners });
   syncChips(room);
+  if (checkGameWinner(room)) return { success: true, finished: true, result };
   prepareNextHand(room);
 
   return { success: true, finished: true, result };
@@ -580,9 +581,43 @@ function showdown(room) {
   room.status = 'waiting';
   writeLog('HAND_END', { roomId: room.id, reason: 'showdown', winners: result.winners, hands: result.hands });
   syncChips(room);
+  if (checkGameWinner(room)) return { success: true, finished: true, result };
   prepareNextHand(room);
 
   return { success: true, finished: true, result };
+}
+
+function checkGameWinner(room) {
+  const totalChips = room.players.reduce((s, p) => s + p.chips, 0);
+  if (totalChips <= 0) return false;
+  const threshold = totalChips * 4 / 5;
+  const winner = room.players.find(p => p.chips >= threshold);
+  if (!winner) return false;
+
+  // We have a winner — stop the game
+  room.status = 'waiting';
+  room.game = null;
+
+  const rankList = [...room.players].sort((a, b) => b.chips - a.chips);
+
+  io.to(room.id).emit('gameWon', {
+    winner: { id: winner.id, name: winner.name, avatar: winner.avatar, chips: winner.chips },
+    rankings: rankList.map((p, i) => ({ rank: i + 1, name: p.name, avatar: p.avatar, chips: p.chips }))
+  });
+
+  writeLog('GAME_WON', { roomId: room.id, winner: winner.name, chips: winner.chips, total: totalChips });
+  console.log(`[Game] ${winner.name} wins room ${room.id} with ${winner.chips}/${totalChips} chips`);
+
+  // Reset room after delay
+  setTimeout(() => {
+    if (!rooms.has(room.id)) return;
+    room.players.forEach(p => { p.chips = 5000; p.ready = false; p.spectator = false; });
+    io.to(room.id).emit('roomUpdate', getRoomState(room));
+    io.to(room.id).emit('backToLobby');
+    broadcastRoomList();
+  }, 8000);
+
+  return true;
 }
 
 function prepareNextHand(room) {

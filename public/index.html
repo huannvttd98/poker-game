@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Poker LAN</title>
-    <link rel="stylesheet" href="style.css?v=2.7" />
+    <link rel="stylesheet" href="style.css?v=3.2" />
   </head>
   <body>
     <!-- TOP BAR: Help -->
@@ -276,15 +276,6 @@
             maxlength="12"
             autocomplete="off"
           />
-          <input
-            type="number"
-            id="player-chips"
-            placeholder="Chips (100 - 10000)"
-            min="100"
-            max="10000"
-            value="1000"
-            autocomplete="off"
-          />
           <button id="btn-enter" onclick="enterLobby()">Enter Lobby</button>
         </div>
       </div>
@@ -334,97 +325,172 @@
 
     <!-- GAME SCREEN -->
     <div id="game-screen" class="screen">
-      <div id="spectator-bar" class="spectator-bar" style="display:none"></div>
-      <button class="btn-exit-game" onclick="exitGame()">Exit</button>
-      <button class="btn-toggle-chat" onclick="toggleChat()">Chat</button>
-      <button class="btn-toggle-log" onclick="toggleLog()">Log</button>
-      <div id="chat-panel" class="chat-panel" style="display:none">
-        <div class="chat-header">Chat <span id="chat-badge" class="chat-badge" style="display:none">0</span></div>
-        <div id="chat-messages" class="chat-messages"></div>
-        <div class="chat-input-row">
-          <input type="text" id="chat-input" placeholder="Nhan tin..." maxlength="200" autocomplete="off" />
-          <button id="btn-chat-send" onclick="sendChat()">Send</button>
+      <!-- SIDEBAR -->
+      <div class="game-sidebar">
+        <div class="sidebar-header">
+          <button class="btn-exit-game" onclick="exitGame()">Exit</button>
+          <span class="sidebar-room-label" id="sidebar-room-label"></span>
         </div>
-      </div>
-      <div id="action-log" class="action-log" style="display:none">
-        <div class="action-log-header">Action Log</div>
-        <div id="action-log-list" class="action-log-list"></div>
-      </div>
-      <div class="poker-table">
-        <div class="table-surface">
-          <div id="community-cards" class="community-cards"></div>
-          <div class="pot-wrapper">
-            <div id="global-timer" class="global-timer" style="display: none">
-              <svg width="36" height="36" viewBox="0 0 36 36">
-                <circle class="gt-ring-bg" cx="18" cy="18" r="15" />
-                <circle
-                  class="gt-ring-fg"
-                  id="gt-ring-fg"
-                  cx="18"
-                  cy="18"
-                  r="15"
-                  stroke-dasharray="94.25"
-                  stroke-dashoffset="0"
-                />
-              </svg>
-              <span class="gt-text" id="gt-text">30</span>
+
+        <!-- Sidebar Tabs -->
+        <div class="sidebar-tabs">
+          <button class="sidebar-tab active" onclick="switchSidebarTab('chat', this)">
+            Chat <span id="chat-badge" class="chat-badge" style="display:none">0</span>
+          </button>
+          <button class="sidebar-tab" onclick="switchSidebarTab('rank', this)">Rank</button>
+          <button class="sidebar-tab" onclick="switchSidebarTab('rules', this)">Luat choi</button>
+          <button class="sidebar-tab" onclick="switchSidebarTab('log', this)">Log</button>
+        </div>
+
+        <!-- Tab: Chat -->
+        <div id="sidebar-chat" class="sidebar-panel active">
+          <div id="chat-messages" class="chat-messages"></div>
+          <div class="chat-input-row">
+            <input type="text" id="chat-input" placeholder="Nhan tin..." maxlength="200" autocomplete="off" />
+            <button id="btn-chat-send" onclick="sendChat()">Send</button>
+          </div>
+        </div>
+
+        <!-- Tab: Rank -->
+        <div id="sidebar-rank" class="sidebar-panel">
+          <div id="rank-list" class="rank-list"></div>
+        </div>
+
+        <!-- Tab: Rules -->
+        <div id="sidebar-rules" class="sidebar-panel">
+          <div class="sidebar-rules-content">
+            <h4>Texas Hold'em</h4>
+            <p>Moi nguoi duoc chia <b>2 la bai rieng</b>, ket hop voi <b>5 la bai chung</b> de tao <b>to hop 5 la manh nhat</b>.</p>
+
+            <h4>Trinh tu</h4>
+            <div class="rules-flow">
+              <span class="rules-step">Preflop</span>
+              <span class="rules-arrow">&rarr;</span>
+              <span class="rules-step">Flop (3)</span>
+              <span class="rules-arrow">&rarr;</span>
+              <span class="rules-step">Turn</span>
+              <span class="rules-arrow">&rarr;</span>
+              <span class="rules-step">River</span>
+              <span class="rules-arrow">&rarr;</span>
+              <span class="rules-step">Showdown</span>
             </div>
-            <div id="pot-display" class="pot-display">Pot: 0</div>
+
+            <h4>Hanh dong</h4>
+            <div class="rules-actions">
+              <div><span class="ra-tag ra-check">Check</span> Bo luot</div>
+              <div><span class="ra-tag ra-call">Call</span> Goi theo</div>
+              <div><span class="ra-tag ra-raise">Raise</span> Tang cuoc</div>
+              <div><span class="ra-tag ra-fold">Fold</span> Bo bai</div>
+              <div><span class="ra-tag ra-allin">All-In</span> Tat tay</div>
+            </div>
+
+            <h4>Xep hang tay bai</h4>
+            <div class="rules-ranks">
+              <div class="rr"><span class="rr-n">1.</span> Royal Flush <span class="rr-d">Sanh cao nhat cung chat</span></div>
+              <div class="rr"><span class="rr-n">2.</span> Straight Flush <span class="rr-d">Sanh cung chat</span></div>
+              <div class="rr"><span class="rr-n">3.</span> Four of a Kind <span class="rr-d">Tu quy</span></div>
+              <div class="rr"><span class="rr-n">4.</span> Full House <span class="rr-d">Ba + Doi</span></div>
+              <div class="rr"><span class="rr-n">5.</span> Flush <span class="rr-d">5 la cung chat</span></div>
+              <div class="rr"><span class="rr-n">6.</span> Straight <span class="rr-d">Sanh</span></div>
+              <div class="rr"><span class="rr-n">7.</span> Three of a Kind <span class="rr-d">Sam co</span></div>
+              <div class="rr"><span class="rr-n">8.</span> Two Pair <span class="rr-d">Hai doi</span></div>
+              <div class="rr"><span class="rr-n">9.</span> One Pair <span class="rr-d">Mot doi</span></div>
+              <div class="rr"><span class="rr-n">10.</span> High Card <span class="rr-d">La cao nhat</span></div>
+            </div>
           </div>
-          <div id="stage-display" class="stage-display"></div>
         </div>
-        <div id="seats" class="seats"></div>
-      </div>
-      <div id="game-actions" class="game-actions" style="display: none">
-        <div class="actions-row">
-          <button onclick="doAction('fold')" class="btn-fold">Fold</button>
-          <button onclick="doAction('check')" id="btn-check" class="btn-check">
-            Check
-          </button>
-          <button
-            onclick="doAction('call')"
-            id="btn-call"
-            class="btn-call"
-            style="display: none"
-          >
-            Call <span id="call-amount"></span>
-          </button>
-          <button onclick="doAction('allin')" class="btn-allin">All-In</button>
-        </div>
-        <div class="raise-section">
-          <div class="pot-buttons">
-            <button onclick="setPotRaise(1/3)" class="btn-pot">1/3 Pot</button>
-            <button onclick="setPotRaise(1/2)" class="btn-pot">1/2 Pot</button>
-            <button onclick="setPotRaise(2/3)" class="btn-pot">2/3 Pot</button>
-            <button onclick="setPotRaise(1)" class="btn-pot">Full Pot</button>
-          </div>
-          <div class="raise-input-row">
-            <button onclick="adjustRaise(-1)" class="btn-adjust">-BB</button>
-            <input type="number" id="raise-input" class="raise-input" min="0" max="10000" value="0"
-              oninput="syncSliderFromInput()" />
-            <button onclick="adjustRaise(1)" class="btn-adjust">+BB</button>
-          </div>
-          <div class="raise-slider-row">
-            <span class="raise-min-label" id="raise-min-label">Min</span>
-            <input type="range" id="raise-slider" min="0" max="1000" value="0"
-              oninput="syncInputFromSlider()" />
-            <span class="raise-max-label" id="raise-max-label">Max</span>
-          </div>
-          <button onclick="doAction('raise')" class="btn-raise">Raise <span id="raise-label">0</span></button>
+
+        <!-- Tab: Log -->
+        <div id="sidebar-log" class="sidebar-panel">
+          <div id="action-log-list" class="action-log-list"></div>
         </div>
       </div>
-      <div id="result-overlay" class="result-overlay" style="display: none">
-        <div class="result-content">
-          <h2 id="result-text"></h2>
-          <div id="result-details"></div>
-          <div id="ready-countdown" class="ready-countdown"></div>
-          <div id="ready-status" class="ready-status"></div>
-          <button id="btn-ready-next" onclick="readyNextHand()">Ready</button>
+
+      <!-- MAIN GAME AREA -->
+      <div class="game-main">
+        <div id="spectator-bar" class="spectator-bar" style="display:none"></div>
+        <!-- Mobile sidebar toggle -->
+        <button class="btn-toggle-sidebar" onclick="toggleSidebar()">&#9776;</button>
+        <div class="poker-table">
+          <div class="table-surface">
+            <div id="community-cards" class="community-cards"></div>
+            <div class="pot-wrapper">
+              <div id="global-timer" class="global-timer" style="display: none">
+                <svg width="36" height="36" viewBox="0 0 36 36">
+                  <circle class="gt-ring-bg" cx="18" cy="18" r="15" />
+                  <circle
+                    class="gt-ring-fg"
+                    id="gt-ring-fg"
+                    cx="18"
+                    cy="18"
+                    r="15"
+                    stroke-dasharray="94.25"
+                    stroke-dashoffset="0"
+                  />
+                </svg>
+                <span class="gt-text" id="gt-text">18</span>
+              </div>
+              <div id="pot-display" class="pot-display">Pot: 0</div>
+            </div>
+            <div id="stage-display" class="stage-display"></div>
+          </div>
+          <div id="seats" class="seats"></div>
+        </div>
+        <div id="game-actions" class="game-actions" style="display: none">
+          <div class="actions-row">
+            <button onclick="doAction('fold')" class="btn-fold">Fold</button>
+            <button onclick="doAction('check')" id="btn-check" class="btn-check">Check</button>
+            <button onclick="doAction('call')" id="btn-call" class="btn-call" style="display: none">
+              Call <span id="call-amount"></span>
+            </button>
+            <button onclick="doAction('allin')" class="btn-allin">All-In</button>
+          </div>
+          <div class="raise-section">
+            <div class="pot-buttons">
+              <button onclick="setPotRaise(1/3)" class="btn-pot">1/3 Pot</button>
+              <button onclick="setPotRaise(1/2)" class="btn-pot">1/2 Pot</button>
+              <button onclick="setPotRaise(2/3)" class="btn-pot">2/3 Pot</button>
+              <button onclick="setPotRaise(1)" class="btn-pot">Full Pot</button>
+            </div>
+            <div class="raise-input-row">
+              <button onclick="adjustRaise(-1)" class="btn-adjust">-BB</button>
+              <input type="number" id="raise-input" class="raise-input" min="0" max="10000" value="0"
+                oninput="syncSliderFromInput()" />
+              <button onclick="adjustRaise(1)" class="btn-adjust">+BB</button>
+            </div>
+            <div class="raise-slider-row">
+              <span class="raise-min-label" id="raise-min-label">Min</span>
+              <input type="range" id="raise-slider" min="0" max="1000" value="0"
+                oninput="syncInputFromSlider()" />
+              <span class="raise-max-label" id="raise-max-label">Max</span>
+            </div>
+            <button onclick="doAction('raise')" class="btn-raise">Raise <span id="raise-label">0</span></button>
+          </div>
+        </div>
+        <div id="result-overlay" class="result-overlay" style="display: none">
+          <div class="result-content">
+            <h2 id="result-text"></h2>
+            <div id="result-details"></div>
+            <div id="ready-countdown" class="ready-countdown"></div>
+            <div id="ready-status" class="ready-status"></div>
+            <button id="btn-ready-next" onclick="readyNextHand()">Ready</button>
+          </div>
         </div>
       </div>
     </div>
 
-    <script src="/socket.io/socket.io.js?v=2.7"></script>
-    <script src="app.js?v=2.7"></script>
+    <!-- GAME WON OVERLAY -->
+    <div id="game-won-overlay" class="game-won-overlay" style="display:none"></div>
+
+    <!-- MODAL -->
+    <div id="app-modal" class="app-modal" style="display:none">
+      <div class="app-modal-box">
+        <div id="app-modal-msg" class="app-modal-msg"></div>
+        <div id="app-modal-btns" class="app-modal-btns"></div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js?v=3.2"></script>
+    <script src="app.js?v=3.2"></script>
   </body>
 </html>
