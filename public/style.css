@@ -76,6 +76,21 @@ button:active {
 }
 
 /* ============================================
+   LANGUAGE SWITCHER
+   ============================================ */
+.lang-switcher {
+  position: fixed; top: 12px; right: 12px; z-index: 9000;
+}
+.lang-select {
+  padding: 5px 8px; font-size: 0.7rem; font-weight: 600;
+  background: var(--panel); backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border); border-radius: 8px;
+  color: var(--text); cursor: pointer; outline: none;
+  appearance: auto;
+}
+.lang-select option { background: var(--bg2); color: var(--text); }
+
+/* ============================================
    TOP BAR (Timer + Help)
    ============================================ */
 .top-bar {
@@ -712,7 +727,6 @@ button:active {
   padding: 8px 14px;
   font-size: 0.8rem;
   border: 1px solid var(--glass-border);
-  margin-right: 36px;
 }
 
 .player-list {
@@ -829,6 +843,18 @@ button:active {
 .sidebar-room-label {
   font-size: 0.75rem; font-weight: 700; color: var(--gold);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1;
+}
+.btn-close-sidebar {
+  display: none; background: none; border: none; color: var(--muted);
+  font-size: 1.3rem; cursor: pointer; padding: 0 4px; line-height: 1;
+}
+.btn-close-sidebar:hover { color: var(--text); }
+
+/* Sidebar backdrop */
+.sidebar-backdrop {
+  display: none; position: fixed; inset: 0; z-index: 99;
+  background: rgba(0,0,0,0.5);
 }
 
 /* Tabs */
@@ -857,11 +883,13 @@ button:active {
 /* Chat tab unread highlight */
 .sidebar-tab.has-unread { color: var(--red); }
 
-/* Mobile hamburger notification dot */
-.btn-toggle-sidebar.has-notif::after {
-  content: ''; position: absolute; top: 5px; right: 5px;
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--red); box-shadow: 0 0 6px var(--red);
+/* Mobile hamburger notification badge */
+.mobile-chat-badge {
+  position: absolute; top: -6px; right: -6px;
+  background: var(--red); color: #fff;
+  font-size: 0.55rem; font-weight: 700; line-height: 1;
+  padding: 3px 5px; border-radius: 8px; min-width: 16px;
+  text-align: center; box-shadow: 0 0 8px var(--red);
   animation: badgePulse 1s ease infinite;
 }
 /* Panels */
@@ -946,13 +974,26 @@ button:active {
 .ra-raise { background: rgba(245,158,11,0.15); color: var(--orange); }
 .ra-fold { background: rgba(122,122,154,0.15); color: var(--muted); }
 .ra-allin { background: rgba(255,77,106,0.15); color: var(--red); }
-.rules-ranks { display: flex; flex-direction: column; gap: 2px; }
+.rules-ranks { display: flex; flex-direction: column; gap: 6px; }
 .rr {
-  font-size: 0.65rem; color: var(--text); padding: 3px 0;
-  display: flex; align-items: baseline; gap: 4px;
+  font-size: 0.65rem; color: var(--text); padding: 6px 8px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  background: var(--glass); border-radius: 8px;
 }
-.rr-n { color: var(--gold); font-weight: 700; min-width: 20px; }
-.rr-d { color: var(--dim); font-size: 0.58rem; margin-left: auto; }
+.rr-n { color: var(--gold); font-weight: 700; min-width: 20px; flex-shrink: 0; }
+.rr-info { flex: 1; min-width: 0; }
+.rr-name { font-weight: 700; color: var(--text); display: block; font-size: 0.65rem; }
+.rr-d { color: var(--dim); font-size: 0.55rem; display: block; }
+.rr-cards {
+  width: 100%; display: flex; gap: 3px; margin-top: 4px;
+}
+.rc {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 36px; border-radius: 4px; font-size: 0.55rem; font-weight: 700;
+  background: #fff; border: 1px solid #ddd;
+}
+.rc.red { color: #e53e3e; }
+.rc.black { color: #1a1a2e; }
 
 /* Rank in sidebar */
 .rank-list {
@@ -1906,7 +1947,9 @@ button:active {
     box-shadow: 4px 0 24px rgba(0,0,0,0.5);
   }
   .game-sidebar.open { transform: translateX(0); }
+  .game-sidebar.open ~ .sidebar-backdrop { display: block; }
   .btn-toggle-sidebar { display: block; }
+  .btn-close-sidebar { display: block; }
   .game-main { flex: 1; }
 }
 

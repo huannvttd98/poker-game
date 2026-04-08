@@ -48,7 +48,7 @@ function selectAvatar(emoji) {
 
 function enterLobby() {
   const name = document.getElementById('player-name').value.trim();
-  if (!name) return showModal('Nhap ten cua ban');
+  if (!name) return showModal(t('enterYourName'));
 
   myProfile.name = name;
   myProfile.chips = 5000;
@@ -62,9 +62,9 @@ function renderProfileCard() {
     <div class="profile-avatar">${myProfile.avatar}</div>
     <div class="profile-details">
       <div class="profile-name">${esc(myProfile.name)}</div>
-      <div class="profile-chips">${myProfile.chips} chips</div>
+      <div class="profile-chips">${myProfile.chips} ${t('chips')}</div>
     </div>
-    <button class="btn-edit-profile" onclick="editProfile()">Edit</button>
+    <button class="btn-edit-profile" onclick="editProfile()">${t('editProfile')}</button>
   `;
 }
 
@@ -74,8 +74,9 @@ function editProfile() {
   showScreen('profile-screen');
 }
 
-// Init avatar picker on load
+// Init on load
 initAvatarPicker();
+applyI18n();
 
 // ============================================
 // LOBBY
@@ -92,7 +93,7 @@ function createRoom() {
 
 function joinRoom() {
   const code = document.getElementById('room-code').value.trim().toUpperCase();
-  if (!code) return showModal('Nhap ma phong');
+  if (!code) return showModal(t('enterRoomCode'));
   socket.emit('joinRoom', { roomId: code, playerName: myProfile.name, chips: myProfile.chips, avatar: myProfile.avatar }, (res) => {
     if (res.error) return showModal(res.error);
     myId = res.playerId;
@@ -109,7 +110,7 @@ function joinRoom() {
 }
 
 async function exitGame() {
-  const ok = await showModal('Thoat khoi ban? Ban se mat het chips da dat.', { confirm: true });
+  const ok = await showModal(t('exitConfirm'), { confirm: true });
   if (!ok) return;
   socket.emit('leaveRoom');
   myId = null;
@@ -138,7 +139,7 @@ function toggleReady() {
   socket.emit('toggleReady');
   isReady = !isReady;
   const btn = document.getElementById('btn-ready');
-  btn.textContent = isReady ? 'Not Ready' : 'Ready';
+  btn.textContent = isReady ? t('notReady') : t('ready');
   btn.classList.toggle('is-ready', isReady);
 }
 
@@ -154,21 +155,21 @@ function startGame() {
 socket.on('roomList', (roomList) => {
   const el = document.getElementById('room-list');
   if (!roomList || roomList.length === 0) {
-    el.innerHTML = '<div class="room-list-empty">No rooms available</div>';
+    el.innerHTML = `<div class="room-list-empty">${t('noRooms')}</div>`;
     return;
   }
   el.innerHTML = roomList.map(r => {
     const canJoin = r.playerCount < r.maxPlayers;
     const isPlaying = r.status === 'playing' || r.status === 'waiting_next';
-    const btnText = canJoin ? (isPlaying ? 'Watch' : 'Join') : 'Full';
+    const btnText = canJoin ? (isPlaying ? t('watch') : t('join')) : t('full');
     return `
       <div class="room-list-item">
         <div class="room-info">
           <div class="room-code">${r.name ? esc(r.name) : esc(r.id)}</div>
-          <div class="room-host">${r.name ? esc(r.id) + ' · ' : ''}Host: ${esc(r.hostName)}</div>
+          <div class="room-host">${r.name ? esc(r.id) + ' · ' : ''}${t('host')}: ${esc(r.hostName)}</div>
         </div>
         <span class="room-players">${r.playerCount}/${r.maxPlayers}</span>
-        <span class="room-status-badge ${r.status}">${isPlaying ? 'playing' : r.status}</span>
+        <span class="room-status-badge ${r.status}">${isPlaying ? t('playing') : r.status}</span>
         <button class="btn-quick-join" onclick="quickJoin('${esc(r.id)}')" ${canJoin ? '' : 'disabled'}>
           ${btnText}
         </button>
@@ -216,15 +217,15 @@ socket.on('roomUpdate', (room) => {
     const classes = ['player-card'];
     if (p.ready) classes.push('ready');
     if (isHost) classes.push('host');
-    const kickBtn = (iAmHost && !isHost) ? `<button class="btn-kick" onclick="kickPlayer('${p.id}')">Kick</button>` : '';
+    const kickBtn = (iAmHost && !isHost) ? `<button class="btn-kick" onclick="kickPlayer('${p.id}')">${t('kick')}</button>` : '';
     return `
       <div class="${classes.join(' ')}">
         <div class="player-avatar-small">${p.avatar || '😎'}</div>
         <div class="player-name">${esc(p.name)}</div>
-        <div class="player-chips">${p.chips} chips</div>
-        ${p.ready ? '<div class="player-status">Ready</div>' : ''}
-        ${p.spectator ? '<div class="player-status" style="color:#ff9800">Watching</div>' : ''}
-        ${!p.connected ? '<div class="player-status" style="color:#e94560">Disconnected</div>' : ''}
+        <div class="player-chips">${p.chips} ${t('chips')}</div>
+        ${p.ready ? `<div class="player-status">${t('ready')}</div>` : ''}
+        ${p.spectator ? `<div class="player-status" style="color:#ff9800">${t('watching')}</div>` : ''}
+        ${!p.connected ? `<div class="player-status" style="color:#e94560">${t('disconnected')}</div>` : ''}
         ${kickBtn}
       </div>
     `;
@@ -250,7 +251,7 @@ socket.on('roomUpdate', (room) => {
       const readyCount = room.players.filter(p => p.ready).length;
       readyEl.innerHTML = room.players.map(p =>
         `<span class="ready-dot ${p.ready ? 'is-ready' : ''}">${p.avatar || '😎'}</span>`
-      ).join('') + `<div class="ready-count">${readyCount}/${total} ready</div>`;
+      ).join('') + `<div class="ready-count">${t('readyCount', {n: readyCount, t: total})}</div>`;
     }
   }
 
@@ -333,7 +334,7 @@ function renderGame(game) {
           <div class="seat-avatar">${p.avatar || '😎'}</div>
           <div class="seat-name">${esc(p.name)}</div>
           <div class="seat-chips">${p.chips}</div>
-          ${p.bet > 0 ? `<div class="seat-bet">Bet: ${p.bet}</div>` : ''}
+          ${p.bet > 0 ? `<div class="seat-bet">${t('bet')}: ${p.bet}</div>` : ''}
           ${p.allIn ? '<div class="seat-bet" style="color:#e94560">ALL-IN</div>' : ''}
         </div>
         <div class="seat-cards">${cardsHtml}</div>
@@ -346,7 +347,7 @@ function renderGame(game) {
   ccEl.innerHTML = game.communityCards.map(c => renderCard(c)).join('');
 
   // Pot
-  document.getElementById('pot-display').textContent = `Pot: ${game.pot}`;
+  document.getElementById('pot-display').textContent = `${t('pot')}: ${game.pot}`;
   document.getElementById('stage-display').textContent = game.stage;
 
   // Actions
@@ -493,21 +494,21 @@ socket.on('handFinished', (result) => {
     const p = currentGame?.players.find(p => p.id === w.playerId);
     const name = p?.name || 'Unknown';
     const avatar = p?.avatar || '😎';
-    textEl.textContent = 'Winner!';
+    textEl.textContent = t('winner');
     detailsEl.innerHTML = `
       <div class="result-player">
         <span class="result-avatar">${avatar}</span>
         <span class="result-name">${esc(name)}</span>
       </div>
-      <div class="result-chips">+${w.amount} chips</div>
-      <div class="result-reason">Doi thu bo bai</div>`;
+      <div class="result-chips">+${w.amount} ${t('chips')}</div>
+      <div class="result-reason">${t('othersFolded')}</div>`;
   } else {
-    textEl.textContent = 'Showdown!';
+    textEl.textContent = t('showdown');
 
     // Community cards
     const ccHtml = currentGame?.communityCards?.length
       ? `<div class="result-community">
-          <div class="result-section-label">Bai chung</div>
+          <div class="result-section-label">${t('communityCards')}</div>
           <div class="result-cards">${currentGame.communityCards.map(c => renderCard(c)).join('')}</div>
         </div>`
       : '';
@@ -536,7 +537,7 @@ socket.on('handFinished', (result) => {
 
   // Reset ready button
   const btnReady = document.getElementById('btn-ready-next');
-  btnReady.textContent = isSpectator ? 'Join & Ready' : 'Ready';
+  btnReady.textContent = isSpectator ? t('joinReady') : t('ready');
   btnReady.disabled = false;
   btnReady.classList.remove('btn-waiting');
 
@@ -557,7 +558,7 @@ socket.on('readyCountdown', ({ deadline }) => {
     const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
     const el = document.getElementById('ready-countdown');
     if (el) {
-      el.textContent = remaining > 0 ? `Tu dong bat dau sau ${remaining}s` : '';
+      el.textContent = remaining > 0 ? t('autoStartIn', {s: remaining}) : '';
     }
     if (remaining <= 0) stopReadyCountdown();
   }, 250);
@@ -588,7 +589,7 @@ socket.on('spectatorMode', () => {
 async function kickPlayer(targetId) {
   const target = currentRoom?.players.find(p => p.id === targetId);
   const name = target?.name || 'player';
-  const ok = await showModal(`Kick ${name} khoi phong?`, { confirm: true });
+  const ok = await showModal(t('kickConfirm', {name}), { confirm: true });
   if (!ok) return;
   socket.emit('kickPlayer', targetId, (res) => {
     if (res?.error) showModal(res.error);
@@ -605,7 +606,7 @@ socket.on('kicked', () => {
   stopTimer();
   closeResult();
   showScreen('lobby-screen');
-  showModal('Ban da bi chu phong kick!');
+  showModal(t('kicked'));
 });
 
 socket.on('backToLobby', () => {
@@ -640,12 +641,12 @@ socket.on('gameWon', (data) => {
 
   overlay.innerHTML = `
     <div class="gw-content">
-      <div class="gw-title">${isMe ? 'Ban da thang!' : `${esc(data.winner.name)} thang cuoc!`}</div>
+      <div class="gw-title">${isMe ? t('youWin') : t('playerWins', {name: esc(data.winner.name)})}</div>
       <div class="gw-winner-avatar">${data.winner.avatar || '😎'}</div>
       <div class="gw-winner-name">${esc(data.winner.name)}</div>
-      <div class="gw-winner-chips">${data.winner.chips} chips</div>
+      <div class="gw-winner-chips">${data.winner.chips} ${t('chips')}</div>
       <div class="gw-rankings">${rankHtml}</div>
-      <div class="gw-note">Tro ve phong sau vai giay...</div>
+      <div class="gw-note">${t('backToRoom')}</div>
     </div>`;
   overlay.style.display = 'flex';
 });
@@ -658,7 +659,7 @@ function closeGameWon() {
 function readyNextHand() {
   socket.emit('toggleReady');
   const btn = document.getElementById('btn-ready-next');
-  btn.textContent = 'Waiting...';
+  btn.textContent = t('waiting');
   btn.disabled = true;
   btn.classList.add('btn-waiting');
   if (isSpectator) {
@@ -677,8 +678,8 @@ function updateSpectatorBar() {
   if (isSpectator) {
     bar.style.display = 'flex';
     bar.innerHTML = `
-      <span class="spectator-label">Dang xem</span>
-      <button class="btn-join-next" onclick="joinNextHand()">Tham gia van sau</button>
+      <span class="spectator-label">${t('spectating')}</span>
+      <button class="btn-join-next" onclick="joinNextHand()">${t('joinNextHand')}</button>
     `;
   } else {
     bar.style.display = 'none';
@@ -700,7 +701,7 @@ function renderRankList() {
 
   const players = currentRoom?.players;
   if (!players || players.length === 0) {
-    el.innerHTML = '<div class="rank-empty">Chua co nguoi choi</div>';
+    el.innerHTML = `<div class="rank-empty">${t('noPlayers')}</div>`;
     return;
   }
 
@@ -720,7 +721,7 @@ function renderRankList() {
     <div class="rank-progress-bar">
       <div class="rank-progress-fill ${pct >= 90 ? 'rank-progress-hot' : ''}" style="width:${pct}%"></div>
     </div>
-    <div class="rank-progress-label">${pct}% de thang</div>
+    <div class="rank-progress-label">${pct}% ${t('toWin')}</div>
   </div>`;
 
   html += sorted.map((p, i) => {
@@ -760,11 +761,11 @@ function showModal(msg, opts = {}) {
 
     if (opts.confirm) {
       btnsEl.innerHTML =
-        `<button class="btn-modal-cancel" id="modal-cancel">${opts.cancelText || 'Huy'}</button>` +
-        `<button class="btn-modal-ok" id="modal-ok">${opts.okText || 'Dong y'}</button>`;
+        `<button class="btn-modal-cancel" id="modal-cancel">${opts.cancelText || t('cancel')}</button>` +
+        `<button class="btn-modal-ok" id="modal-ok">${opts.okText || t('confirm')}</button>`;
     } else {
       btnsEl.innerHTML =
-        `<button class="btn-modal-ok" id="modal-ok">${opts.okText || 'OK'}</button>`;
+        `<button class="btn-modal-ok" id="modal-ok">${opts.okText || t('ok')}</button>`;
     }
 
     overlay.style.display = 'flex';
@@ -877,7 +878,7 @@ function switchSidebarTab(tab, btn) {
   const panel = document.getElementById('sidebar-' + tab);
   if (panel) panel.classList.add('active');
 
-  if (tab === 'chat') {
+  if (tab === 'chat' && isChatVisible()) {
     unreadChat = 0;
     updateChatBadge();
     document.getElementById('chat-input').focus();
@@ -899,9 +900,15 @@ function sendChat() {
   input.value = '';
 }
 
+function isChatVisible() {
+  const isMobile = window.innerWidth < 768;
+  if (isMobile && !sidebarOpen) return false;
+  return currentSidebarTab === 'chat';
+}
+
 function updateChatBadge() {
   const badge = document.getElementById('chat-badge');
-  const chatVisible = currentSidebarTab === 'chat';
+  const chatVisible = isChatVisible();
   const hasUnread = unreadChat > 0 && !chatVisible;
 
   // Tab badge
@@ -920,9 +927,22 @@ function updateChatBadge() {
   const chatTab = document.querySelector('.sidebar-tab');
   if (chatTab) chatTab.classList.toggle('has-unread', hasUnread);
 
-  // Mobile hamburger dot
+  // Mobile hamburger badge
   const toggleBtn = document.querySelector('.btn-toggle-sidebar');
-  if (toggleBtn) toggleBtn.classList.toggle('has-notif', hasUnread);
+  if (toggleBtn) {
+    toggleBtn.classList.toggle('has-notif', hasUnread);
+    let mobileBadge = toggleBtn.querySelector('.mobile-chat-badge');
+    if (hasUnread) {
+      if (!mobileBadge) {
+        mobileBadge = document.createElement('span');
+        mobileBadge.className = 'mobile-chat-badge';
+        toggleBtn.appendChild(mobileBadge);
+      }
+      mobileBadge.textContent = unreadChat > 99 ? '99+' : unreadChat;
+    } else if (mobileBadge) {
+      mobileBadge.remove();
+    }
+  }
 }
 
 socket.on('chatMessage', (msg) => {
@@ -941,8 +961,7 @@ socket.on('chatMessage', (msg) => {
   list.appendChild(div);
   list.scrollTop = list.scrollHeight;
 
-  const chatVisible = currentSidebarTab === 'chat';
-  if (!chatVisible) {
+  if (!isChatVisible()) {
     unreadChat++;
     updateChatBadge();
     if (!isMe) showChatToast(msg);

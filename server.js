@@ -37,7 +37,7 @@ const rooms = new Map();
 const playerSockets = new Map(); // socketId -> { roomId, playerId }
 const TURN_TIME = 18; // seconds per turn
 const NEXT_HAND_DELAY = 5000; // 5s delay between hands
-const READY_TIMEOUT = 10; // seconds to ready up before auto-skip
+const READY_TIMEOUT = 12; // seconds to ready up before auto-skip
 
 // ============================================
 // POKER UTILS
@@ -588,6 +588,8 @@ function showdown(room) {
   return { success: true, finished: true, result };
 }
 
+const GAME_WON_DELAY = 5000; // show hand result for 5s before game won
+
 function checkGameWinner(room) {
   const totalChips = room.players.reduce((s, p) => s + p.chips, 0);
   if (totalChips <= 0) return false;
@@ -595,28 +597,31 @@ function checkGameWinner(room) {
   const winner = room.players.find(p => p.chips >= threshold);
   if (!winner) return false;
 
-  // We have a winner — stop the game
-  room.status = 'waiting';
-  room.game = null;
-
   const rankList = [...room.players].sort((a, b) => b.chips - a.chips);
-
-  io.to(room.id).emit('gameWon', {
+  const wonData = {
     winner: { id: winner.id, name: winner.name, avatar: winner.avatar, chips: winner.chips },
     rankings: rankList.map((p, i) => ({ rank: i + 1, name: p.name, avatar: p.avatar, chips: p.chips }))
-  });
+  };
 
   writeLog('GAME_WON', { roomId: room.id, winner: winner.name, chips: winner.chips, total: totalChips });
   console.log(`[Game] ${winner.name} wins room ${room.id} with ${winner.chips}/${totalChips} chips`);
 
-  // Reset room after delay
+  // Delay gameWon so players see the hand result first
   setTimeout(() => {
     if (!rooms.has(room.id)) return;
-    room.players.forEach(p => { p.chips = 5000; p.ready = false; p.spectator = false; });
-    io.to(room.id).emit('roomUpdate', getRoomState(room));
-    io.to(room.id).emit('backToLobby');
-    broadcastRoomList();
-  }, 8000);
+    room.status = 'waiting';
+    room.game = null;
+    io.to(room.id).emit('gameWon', wonData);
+
+    // Reset room after showing winner
+    setTimeout(() => {
+      if (!rooms.has(room.id)) return;
+      room.players.forEach(p => { p.chips = 5000; p.ready = false; p.spectator = false; });
+      io.to(room.id).emit('roomUpdate', getRoomState(room));
+      io.to(room.id).emit('backToLobby');
+      broadcastRoomList();
+    }, 8000);
+  }, GAME_WON_DELAY);
 
   return true;
 }

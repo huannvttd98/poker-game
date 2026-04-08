@@ -9,18 +9,20 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Poker LAN</title>
-    <link rel="stylesheet" href="style.css?v=3.2" />
+    <link rel="stylesheet" href="style.css?v=3.3" />
   </head>
   <body>
-    <!-- TOP BAR: Help -->
-    <div class="top-bar">
-      <button class="btn-help" onclick="toggleHelp()">?</button>
+    <!-- LANG SWITCHER -->
+    <div class="lang-switcher">
+      <select id="lang-select" class="lang-select" onchange="setLang(this.value)">
+        <option value="vi">🇻🇳 Tiếng Việt</option>
+        <option value="en">🇬🇧 English</option>
+      </select>
     </div>
 
     <!-- HELP OVERLAY -->
     <div id="help-overlay" class="help-overlay" style="display: none">
       <div class="help-content">
-        <button class="help-close" onclick="toggleHelp()">&times;</button>
         <h2>Huong Dan Choi Poker</h2>
         <div class="help-body">
           <h3>Texas Hold'em la gi?</h3>
@@ -272,11 +274,12 @@
           <input
             type="text"
             id="player-name"
-            placeholder="Your name"
+            data-i18n="enterName"
+            placeholder="Ten cua ban"
             maxlength="12"
             autocomplete="off"
           />
-          <button id="btn-enter" onclick="enterLobby()">Enter Lobby</button>
+          <button id="btn-enter" onclick="enterLobby()" data-i18n="enterLobby">Vao sanh</button>
         </div>
       </div>
     </div>
@@ -286,23 +289,24 @@
       <div class="lobby-container">
         <div class="my-profile-card" id="my-profile-card"></div>
         <div class="lobby-buttons">
-          <input type="text" id="room-name" placeholder="Room name (optional)" maxlength="20" autocomplete="off" />
-          <button id="btn-create" onclick="createRoom()">Create Room</button>
+          <input type="text" id="room-name" data-i18n="roomNameOpt" placeholder="Ten phong (tuy chon)" maxlength="20" autocomplete="off" />
+          <button id="btn-create" onclick="createRoom()" data-i18n="createRoom">Tao phong</button>
           <div class="join-row">
             <input
               type="text"
               id="room-code"
-              placeholder="Room code"
+              data-i18n="roomCode"
+              placeholder="Ma phong"
               maxlength="6"
               autocomplete="off"
             />
-            <button id="btn-join" onclick="joinRoom()">Join</button>
+            <button id="btn-join" onclick="joinRoom()" data-i18n="join">Vao</button>
           </div>
         </div>
         <div class="room-list-section">
-          <h3>Available Rooms</h3>
+          <h3 data-i18n="availableRooms">Phong dang mo</h3>
           <div id="room-list" class="room-list">
-            <div class="room-list-empty">No rooms available</div>
+            <div class="room-list-empty" data-i18n="noRooms">Chua co phong nao</div>
           </div>
         </div>
       </div>
@@ -311,14 +315,14 @@
     <!-- ROOM SCREEN -->
     <div id="room-screen" class="screen">
       <div class="room-header">
-        <span>Room: <strong id="room-id-display"></strong></span>
-        <button id="btn-leave" onclick="leaveRoom()">Leave</button>
+        <span><span data-i18n="room">Phong</span>: <strong id="room-id-display"></strong></span>
+        <button id="btn-leave" onclick="leaveRoom()" data-i18n="leave">Roi</button>
       </div>
       <div id="player-list" class="player-list"></div>
       <div class="room-actions">
-        <button id="btn-ready" onclick="toggleReady()">Ready</button>
-        <button id="btn-start" onclick="startGame()" style="display: none">
-          Start Game
+        <button id="btn-ready" onclick="toggleReady()" data-i18n="ready">San sang</button>
+        <button id="btn-start" onclick="startGame()" style="display: none" data-i18n="startGame">
+          Bat dau
         </button>
       </div>
     </div>
@@ -328,26 +332,27 @@
       <!-- SIDEBAR -->
       <div class="game-sidebar">
         <div class="sidebar-header">
-          <button class="btn-exit-game" onclick="exitGame()">Exit</button>
+          <button class="btn-exit-game" onclick="exitGame()" data-i18n="exit">Thoat</button>
           <span class="sidebar-room-label" id="sidebar-room-label"></span>
+          <button class="btn-close-sidebar" onclick="toggleSidebar()">&times;</button>
         </div>
 
         <!-- Sidebar Tabs -->
         <div class="sidebar-tabs">
           <button class="sidebar-tab active" onclick="switchSidebarTab('chat', this)">
-            Chat <span id="chat-badge" class="chat-badge" style="display:none">0</span>
+            <span data-i18n="chat">Chat</span> <span id="chat-badge" class="chat-badge" style="display:none">0</span>
           </button>
-          <button class="sidebar-tab" onclick="switchSidebarTab('rank', this)">Rank</button>
-          <button class="sidebar-tab" onclick="switchSidebarTab('rules', this)">Luat choi</button>
-          <button class="sidebar-tab" onclick="switchSidebarTab('log', this)">Log</button>
+          <button class="sidebar-tab" onclick="switchSidebarTab('rank', this)" data-i18n="rank">Xep hang</button>
+          <button class="sidebar-tab" onclick="switchSidebarTab('rules', this)" data-i18n="rules">Luat choi</button>
+          <button class="sidebar-tab" onclick="switchSidebarTab('log', this)" data-i18n="log">Nhat ky</button>
         </div>
 
         <!-- Tab: Chat -->
         <div id="sidebar-chat" class="sidebar-panel active">
           <div id="chat-messages" class="chat-messages"></div>
           <div class="chat-input-row">
-            <input type="text" id="chat-input" placeholder="Nhan tin..." maxlength="200" autocomplete="off" />
-            <button id="btn-chat-send" onclick="sendChat()">Send</button>
+            <input type="text" id="chat-input" data-i18n="chatPlaceholder" placeholder="Nhan tin..." maxlength="200" autocomplete="off" />
+            <button id="btn-chat-send" onclick="sendChat()" data-i18n="send">Gui</button>
           </div>
         </div>
 
@@ -359,10 +364,10 @@
         <!-- Tab: Rules -->
         <div id="sidebar-rules" class="sidebar-panel">
           <div class="sidebar-rules-content">
-            <h4>Texas Hold'em</h4>
-            <p>Moi nguoi duoc chia <b>2 la bai rieng</b>, ket hop voi <b>5 la bai chung</b> de tao <b>to hop 5 la manh nhat</b>.</p>
+            <h4 data-i18n="rulesTitle">Texas Hold'em</h4>
+            <p data-i18n="rulesDesc">Moi nguoi duoc chia <b>2 la bai rieng</b>, ket hop voi <b>5 la bai chung</b> de tao <b>to hop 5 la manh nhat</b>.</p>
 
-            <h4>Trinh tu</h4>
+            <h4 data-i18n="rulesSequence">Trinh tu</h4>
             <div class="rules-flow">
               <span class="rules-step">Preflop</span>
               <span class="rules-arrow">&rarr;</span>
@@ -375,27 +380,67 @@
               <span class="rules-step">Showdown</span>
             </div>
 
-            <h4>Hanh dong</h4>
+            <h4 data-i18n="rulesActions">Hanh dong</h4>
             <div class="rules-actions">
-              <div><span class="ra-tag ra-check">Check</span> Bo luot</div>
-              <div><span class="ra-tag ra-call">Call</span> Goi theo</div>
-              <div><span class="ra-tag ra-raise">Raise</span> Tang cuoc</div>
-              <div><span class="ra-tag ra-fold">Fold</span> Bo bai</div>
-              <div><span class="ra-tag ra-allin">All-In</span> Tat tay</div>
+              <div><span class="ra-tag ra-check">Check</span> <span data-i18n="rulesCheckDesc">Bo luot</span></div>
+              <div><span class="ra-tag ra-call">Call</span> <span data-i18n="rulesCallDesc">Goi theo</span></div>
+              <div><span class="ra-tag ra-raise">Raise</span> <span data-i18n="rulesRaiseDesc">Tang cuoc</span></div>
+              <div><span class="ra-tag ra-fold">Fold</span> <span data-i18n="rulesFoldDesc">Bo bai</span></div>
+              <div><span class="ra-tag ra-allin">All-In</span> <span data-i18n="rulesAllInDesc">Tat tay</span></div>
             </div>
 
-            <h4>Xep hang tay bai</h4>
+            <h4 data-i18n="rulesHandRanks">Xep hang tay bai</h4>
             <div class="rules-ranks">
-              <div class="rr"><span class="rr-n">1.</span> Royal Flush <span class="rr-d">Sanh cao nhat cung chat</span></div>
-              <div class="rr"><span class="rr-n">2.</span> Straight Flush <span class="rr-d">Sanh cung chat</span></div>
-              <div class="rr"><span class="rr-n">3.</span> Four of a Kind <span class="rr-d">Tu quy</span></div>
-              <div class="rr"><span class="rr-n">4.</span> Full House <span class="rr-d">Ba + Doi</span></div>
-              <div class="rr"><span class="rr-n">5.</span> Flush <span class="rr-d">5 la cung chat</span></div>
-              <div class="rr"><span class="rr-n">6.</span> Straight <span class="rr-d">Sanh</span></div>
-              <div class="rr"><span class="rr-n">7.</span> Three of a Kind <span class="rr-d">Sam co</span></div>
-              <div class="rr"><span class="rr-n">8.</span> Two Pair <span class="rr-d">Hai doi</span></div>
-              <div class="rr"><span class="rr-n">9.</span> One Pair <span class="rr-d">Mot doi</span></div>
-              <div class="rr"><span class="rr-n">10.</span> High Card <span class="rr-d">La cao nhat</span></div>
+              <div class="rr">
+                <span class="rr-n">1.</span>
+                <div class="rr-info"><span class="rr-name">Royal Flush</span><span class="rr-d" data-i18n="rank1d">Sanh cao nhat cung chat</span></div>
+                <div class="rr-cards"><span class="rc red">A&hearts;</span><span class="rc red">K&hearts;</span><span class="rc red">Q&hearts;</span><span class="rc red">J&hearts;</span><span class="rc red">10&hearts;</span></div>
+              </div>
+              <div class="rr">
+                <span class="rr-n">2.</span>
+                <div class="rr-info"><span class="rr-name">Straight Flush</span><span class="rr-d" data-i18n="rank2d">Sanh cung chat</span></div>
+                <div class="rr-cards"><span class="rc black">9&spades;</span><span class="rc black">8&spades;</span><span class="rc black">7&spades;</span><span class="rc black">6&spades;</span><span class="rc black">5&spades;</span></div>
+              </div>
+              <div class="rr">
+                <span class="rr-n">3.</span>
+                <div class="rr-info"><span class="rr-name">Four of a Kind</span><span class="rr-d" data-i18n="rank3d">Tu quy</span></div>
+                <div class="rr-cards"><span class="rc red">K&hearts;</span><span class="rc red">K&diams;</span><span class="rc black">K&clubs;</span><span class="rc black">K&spades;</span><span class="rc red">3&diams;</span></div>
+              </div>
+              <div class="rr">
+                <span class="rr-n">4.</span>
+                <div class="rr-info"><span class="rr-name">Full House</span><span class="rr-d" data-i18n="rank4d">Ba + Doi</span></div>
+                <div class="rr-cards"><span class="rc red">J&hearts;</span><span class="rc black">J&clubs;</span><span class="rc red">J&diams;</span><span class="rc black">8&spades;</span><span class="rc red">8&hearts;</span></div>
+              </div>
+              <div class="rr">
+                <span class="rr-n">5.</span>
+                <div class="rr-info"><span class="rr-name">Flush</span><span class="rr-d" data-i18n="rank5d">5 la cung chat</span></div>
+                <div class="rr-cards"><span class="rc red">A&diams;</span><span class="rc red">J&diams;</span><span class="rc red">9&diams;</span><span class="rc red">6&diams;</span><span class="rc red">3&diams;</span></div>
+              </div>
+              <div class="rr">
+                <span class="rr-n">6.</span>
+                <div class="rr-info"><span class="rr-name">Straight</span><span class="rr-d" data-i18n="rank6d">Sanh (5 la lien tiep)</span></div>
+                <div class="rr-cards"><span class="rc red">10&hearts;</span><span class="rc black">9&clubs;</span><span class="rc red">8&diams;</span><span class="rc black">7&spades;</span><span class="rc red">6&hearts;</span></div>
+              </div>
+              <div class="rr">
+                <span class="rr-n">7.</span>
+                <div class="rr-info"><span class="rr-name">Three of a Kind</span><span class="rr-d" data-i18n="rank7d">Sam co</span></div>
+                <div class="rr-cards"><span class="rc red">7&hearts;</span><span class="rc red">7&diams;</span><span class="rc black">7&clubs;</span><span class="rc black">K&spades;</span><span class="rc red">2&diams;</span></div>
+              </div>
+              <div class="rr">
+                <span class="rr-n">8.</span>
+                <div class="rr-info"><span class="rr-name">Two Pair</span><span class="rr-d" data-i18n="rank8d">Hai doi</span></div>
+                <div class="rr-cards"><span class="rc red">A&hearts;</span><span class="rc black">A&spades;</span><span class="rc red">9&diams;</span><span class="rc black">9&clubs;</span><span class="rc red">4&hearts;</span></div>
+              </div>
+              <div class="rr">
+                <span class="rr-n">9.</span>
+                <div class="rr-info"><span class="rr-name">One Pair</span><span class="rr-d" data-i18n="rank9d">Mot doi</span></div>
+                <div class="rr-cards"><span class="rc red">Q&hearts;</span><span class="rc black">Q&spades;</span><span class="rc black">10&clubs;</span><span class="rc red">6&diams;</span><span class="rc black">3&spades;</span></div>
+              </div>
+              <div class="rr">
+                <span class="rr-n">10.</span>
+                <div class="rr-info"><span class="rr-name">High Card</span><span class="rr-d" data-i18n="rank10d">La cao nhat</span></div>
+                <div class="rr-cards"><span class="rc red">A&hearts;</span><span class="rc black">J&spades;</span><span class="rc red">8&diams;</span><span class="rc black">5&clubs;</span><span class="rc red">2&hearts;</span></div>
+              </div>
             </div>
           </div>
         </div>
@@ -405,6 +450,9 @@
           <div id="action-log-list" class="action-log-list"></div>
         </div>
       </div>
+
+      <!-- SIDEBAR BACKDROP (mobile) -->
+      <div class="sidebar-backdrop" onclick="toggleSidebar()"></div>
 
       <!-- MAIN GAME AREA -->
       <div class="game-main">
@@ -438,12 +486,12 @@
         </div>
         <div id="game-actions" class="game-actions" style="display: none">
           <div class="actions-row">
-            <button onclick="doAction('fold')" class="btn-fold">Fold</button>
-            <button onclick="doAction('check')" id="btn-check" class="btn-check">Check</button>
+            <button onclick="doAction('fold')" class="btn-fold" data-i18n="fold">Fold</button>
+            <button onclick="doAction('check')" id="btn-check" class="btn-check" data-i18n="check">Check</button>
             <button onclick="doAction('call')" id="btn-call" class="btn-call" style="display: none">
-              Call <span id="call-amount"></span>
+              <span data-i18n="call">Call</span> <span id="call-amount"></span>
             </button>
-            <button onclick="doAction('allin')" class="btn-allin">All-In</button>
+            <button onclick="doAction('allin')" class="btn-allin" data-i18n="allIn">All-In</button>
           </div>
           <div class="raise-section">
             <div class="pot-buttons">
@@ -490,7 +538,8 @@
       </div>
     </div>
 
-    <script src="/socket.io/socket.io.js?v=3.2"></script>
-    <script src="app.js?v=3.2"></script>
+    <script src="/socket.io/socket.io.js?v=3.3"></script>
+    <script src="i18n.js?v=3.3"></script>
+    <script src="app.js?v=3.3"></script>
   </body>
 </html>
