@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 // ============================================
 // FILE LOGGER
@@ -56,7 +57,7 @@ function createDeck() {
 
 function shuffle(array) {
   for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = crypto.randomInt(i + 1);
     [array[i], array[j]] = [array[j], array[i]];
   }
   return array;
