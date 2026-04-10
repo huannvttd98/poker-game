@@ -170,7 +170,7 @@ function removePlayer(room, playerId) {
 function startGame(room) {
   if (room.players.length < 2) return false;
 
-  const activePlayers = room.players.filter(p => p.connected && !p.spectator);
+  const activePlayers = room.players.filter(p => p.connected && !p.spectator && p.chips > 0);
   if (activePlayers.length < 2) return false;
 
   const prevGame = room.game;
@@ -315,7 +315,7 @@ function handleAction(room, playerId, action, amount = 0) {
   if (playerIndex !== game.currentTurn) return { error: 'Not your turn' };
 
   const player = game.players[playerIndex];
-  if (player.folded || player.allIn) return { error: 'Cannot act' };
+  if (player.folded || player.allIn || player.chips <= 0) return { error: 'Cannot act' };
 
   switch (action) {
     case 'fold':
@@ -642,9 +642,10 @@ function checkGameWinner(room) {
 
 function prepareNextHand(room) {
   // Reset ready and spectator for all players
+  // Players with 0 chips become spectators and cannot ready up
   room.players.forEach(p => {
     p.ready = false;
-    p.spectator = false;
+    p.spectator = p.chips <= 0;
   });
 
   room.status = 'waiting_next';
@@ -703,13 +704,14 @@ function autoStartWithReady(room) {
 function checkAllReadyAndStart(room) {
   if (room.status !== 'waiting_next') return;
 
-  const allReady = room.players.every(p => p.ready);
+  const playablePlayers = room.players.filter(p => p.chips > 0);
+  const allReady = playablePlayers.length > 0 && playablePlayers.every(p => p.ready);
   if (!allReady) return;
 
   clearReadyTimer(room);
 
   // Not enough players - go back to lobby
-  if (room.players.length < 2) {
+  if (playablePlayers.length < 2) {
     room.status = 'waiting';
     room.game = null;
     room.players.forEach(p => p.ready = false);
@@ -896,6 +898,7 @@ io.on('connection', (socket) => {
     if (!room) return;
     const player = room.players.find(p => p.id === info.playerId);
     if (player) {
+      if (player.chips <= 0) return;
       player.ready = !player.ready;
       io.to(room.id).emit('roomUpdate', getRoomState(room));
 
@@ -914,9 +917,10 @@ io.on('connection', (socket) => {
     if (!room) return callback?.({ error: 'Room not found' });
     if (room.hostId !== info.playerId) return callback?.({ error: 'Only host can start' });
 
-    const allReady = room.players.every(p => p.ready || p.id === room.hostId);
+    const playablePlayers = room.players.filter(p => p.chips > 0);
+    const allReady = playablePlayers.every(p => p.ready || p.id === room.hostId);
     if (!allReady) return callback?.({ error: 'Not all players are ready' });
-    if (room.players.length < 2) return callback?.({ error: 'Need at least 2 players' });
+    if (playablePlayers.length < 2) return callback?.({ error: 'Need at least 2 players' });
 
     if (!startGame(room)) return callback?.({ error: 'Cannot start game' });
 

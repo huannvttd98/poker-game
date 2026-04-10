@@ -59,6 +59,7 @@ const LANGS = {
     readyCount: '{n}/{t} san sang',
     joinReady: 'Tham gia & San sang',
     waiting: 'Dang cho...',
+    eliminated: 'Da bi loai',
     // Spectator
     spectating: 'Dang xem',
     joinNextHand: 'Tham gia van sau',
@@ -154,6 +155,7 @@ const LANGS = {
     readyCount: '{n}/{t} ready',
     joinReady: 'Join & Ready',
     waiting: 'Waiting...',
+    eliminated: 'Eliminated',
     spectating: 'Spectating',
     joinNextHand: 'Join next hand',
     noPlayers: 'No players yet',

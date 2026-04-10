@@ -174,6 +174,8 @@ function leaveRoom() {
 }
 
 function toggleReady() {
+  const me = currentRoom?.players.find(p => p.id === myId);
+  if (me && me.chips <= 0) return;
   socket.emit('toggleReady');
   isReady = !isReady;
   const btn = document.getElementById('btn-ready');
@@ -569,7 +571,7 @@ function renderActions(game) {
   const actionsEl = document.getElementById('game-actions');
   const me = game.players.find(p => p.id === myId);
 
-  if (!me || me.folded || me.allIn || !me.isCurrent || game.stage === 'showdown' || game.stage === 'finished') {
+  if (!me || me.folded || me.allIn || me.chips <= 0 || !me.isCurrent || game.stage === 'showdown' || game.stage === 'finished') {
     actionsEl.style.display = 'none';
     return;
   }
@@ -727,7 +729,12 @@ socket.on('handFinished', (result) => {
     <div class="result-bar-footer">
       <div id="ready-countdown" class="ready-countdown"></div>
       <div id="ready-status" class="ready-status"></div>
-      <button id="btn-ready-next" class="btn-ready-next" onclick="readyNextHand()">${isSpectator ? t('joinReady') : t('ready')}</button>
+      ${(() => {
+        const me = currentRoom?.players.find(p => p.id === myId);
+        const noChips = me && me.chips <= 0;
+        if (noChips) return `<button id="btn-ready-next" class="btn-ready-next" disabled style="opacity:0.5">${t('eliminated')}</button>`;
+        return `<button id="btn-ready-next" class="btn-ready-next" onclick="readyNextHand()">${isSpectator ? t('joinReady') : t('ready')}</button>`;
+      })()}
     </div>`;
 
   overlay.innerHTML = html;
@@ -847,6 +854,8 @@ function closeGameWon() {
 }
 
 function readyNextHand() {
+  const me = currentRoom?.players.find(p => p.id === myId);
+  if (me && me.chips <= 0) return;
   socket.emit('toggleReady');
   const btn = document.getElementById('btn-ready-next');
   btn.textContent = t('waiting');
