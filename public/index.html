@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Poker LAN</title>
-    <link rel="stylesheet" href="style.css?v=3.3" />
+    <link rel="stylesheet" href="style.css?v=3.4" />
   </head>
   <body>
     <!-- LANG SWITCHER -->
@@ -290,6 +290,47 @@
         <div class="my-profile-card" id="my-profile-card"></div>
         <div class="lobby-buttons">
           <input type="text" id="room-name" data-i18n="roomNameOpt" placeholder="Ten phong (tuy chon)" maxlength="20" autocomplete="off" />
+          <button type="button" class="btn-toggle-settings" onclick="toggleRoomSettings()" data-i18n="roomSettings">Cai dat phong</button>
+          <div id="room-settings" class="room-settings" style="display:none">
+            <div class="setting-row">
+              <label data-i18n="startingChips">Chips ban dau</label>
+              <select id="setting-chips">
+                <option value="1000">1,000</option>
+                <option value="2000">2,000</option>
+                <option value="3000">3,000</option>
+                <option value="5000" selected>5,000</option>
+                <option value="10000">10,000</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <label data-i18n="blinds">Small / Big Blind</label>
+              <select id="setting-blinds">
+                <option value="5/10">5 / 10</option>
+                <option value="10/20" selected>10 / 20</option>
+                <option value="25/50">25 / 50</option>
+                <option value="50/100">50 / 100</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <label data-i18n="maxPlayers">So nguoi choi toi da</label>
+              <select id="setting-max-players">
+                <option value="2">2</option>
+                <option value="4">4</option>
+                <option value="6">6</option>
+                <option value="9" selected>9</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <label data-i18n="turnTime">Thoi gian moi luot (giay)</label>
+              <select id="setting-turn-time">
+                <option value="10">10s</option>
+                <option value="15">15s</option>
+                <option value="18" selected>18s</option>
+                <option value="30">30s</option>
+                <option value="60">60s</option>
+              </select>
+            </div>
+          </div>
           <button id="btn-create" onclick="createRoom()" data-i18n="createRoom">Tao phong</button>
           <div class="join-row">
             <input
@@ -318,6 +359,7 @@
         <span><span data-i18n="room">Phong</span>: <strong id="room-id-display"></strong></span>
         <button id="btn-leave" onclick="leaveRoom()" data-i18n="leave">Roi</button>
       </div>
+      <div id="room-settings-bar" class="room-settings-bar"></div>
       <div id="player-list" class="player-list"></div>
       <div class="room-actions">
         <button id="btn-ready" onclick="toggleReady()" data-i18n="ready">San sang</button>
@@ -515,15 +557,7 @@
             <button onclick="doAction('raise')" class="btn-raise">Raise <span id="raise-label">0</span></button>
           </div>
         </div>
-        <div id="result-overlay" class="result-overlay" style="display: none">
-          <div class="result-content">
-            <h2 id="result-text"></h2>
-            <div id="result-details"></div>
-            <div id="ready-countdown" class="ready-countdown"></div>
-            <div id="ready-status" class="ready-status"></div>
-            <button id="btn-ready-next" onclick="readyNextHand()">Ready</button>
-          </div>
-        </div>
+        <div id="result-overlay" class="result-overlay" style="display: none"></div>
       </div>
     </div>
 
@@ -538,8 +572,8 @@
       </div>
     </div>
 
-    <script src="/socket.io/socket.io.js?v=3.3"></script>
-    <script src="i18n.js?v=3.3"></script>
-    <script src="app.js?v=3.3"></script>
+    <script src="/socket.io/socket.io.js?v=3.4"></script>
+    <script src="i18n.js?v=3.4"></script>
+    <script src="app.js?v=3.4"></script>
   </body>
 </html>

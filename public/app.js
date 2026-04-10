@@ -20,6 +20,10 @@ const AVATARS = [
   '🦇','🔥','⚡','🃏'
 ];
 
+// Animation tracking
+let lastCommunityCardCount = 0;
+let lastGameStage = null;
+
 // ============================================
 // SCREENS
 // ============================================
@@ -81,9 +85,33 @@ applyI18n();
 // ============================================
 // LOBBY
 // ============================================
+function toggleRoomSettings() {
+  const el = document.getElementById('room-settings');
+  const btn = document.querySelector('.btn-toggle-settings');
+  if (el.style.display === 'none') {
+    el.style.display = 'flex';
+    btn.classList.add('active');
+  } else {
+    el.style.display = 'none';
+    btn.classList.remove('active');
+  }
+}
+
+function getRoomSettings() {
+  const blindsVal = document.getElementById('setting-blinds').value.split('/');
+  return {
+    startingChips: parseInt(document.getElementById('setting-chips').value) || 5000,
+    smallBlind: parseInt(blindsVal[0]) || 10,
+    bigBlind: parseInt(blindsVal[1]) || 20,
+    maxPlayers: parseInt(document.getElementById('setting-max-players').value) || 9,
+    turnTime: parseInt(document.getElementById('setting-turn-time').value) || 18,
+  };
+}
+
 function createRoom() {
   const roomName = document.getElementById('room-name').value.trim() || '';
-  socket.emit('createRoom', { playerName: myProfile.name, chips: myProfile.chips, avatar: myProfile.avatar, roomName }, (res) => {
+  const settings = getRoomSettings();
+  socket.emit('createRoom', { playerName: myProfile.name, avatar: myProfile.avatar, roomName, settings }, (res) => {
     if (res.error) return showModal(res.error);
     myId = res.playerId;
     myRoomId = res.roomId;
@@ -94,7 +122,7 @@ function createRoom() {
 function joinRoom() {
   const code = document.getElementById('room-code').value.trim().toUpperCase();
   if (!code) return showModal(t('enterRoomCode'));
-  socket.emit('joinRoom', { roomId: code, playerName: myProfile.name, chips: myProfile.chips, avatar: myProfile.avatar }, (res) => {
+  socket.emit('joinRoom', { roomId: code, playerName: myProfile.name, avatar: myProfile.avatar }, (res) => {
     if (res.error) return showModal(res.error);
     myId = res.playerId;
     myRoomId = res.roomId;
@@ -166,7 +194,7 @@ socket.on('roomList', (roomList) => {
       <div class="room-list-item">
         <div class="room-info">
           <div class="room-code">${r.name ? esc(r.name) : esc(r.id)}</div>
-          <div class="room-host">${r.name ? esc(r.id) + ' · ' : ''}${t('host')}: ${esc(r.hostName)}</div>
+          <div class="room-host">${r.name ? esc(r.id) + ' · ' : ''}${t('host')}: ${esc(r.hostName)} · BB${r.bigBlind || 20}</div>
         </div>
         <span class="room-players">${r.playerCount}/${r.maxPlayers}</span>
         <span class="room-status-badge ${r.status}">${isPlaying ? t('playing') : r.status}</span>
@@ -179,7 +207,7 @@ socket.on('roomList', (roomList) => {
 });
 
 function quickJoin(roomId) {
-  socket.emit('joinRoom', { roomId, playerName: myProfile.name, chips: myProfile.chips, avatar: myProfile.avatar }, (res) => {
+  socket.emit('joinRoom', { roomId, playerName: myProfile.name, avatar: myProfile.avatar }, (res) => {
     if (res.error) return showModal(res.error);
     myId = res.playerId;
     myRoomId = res.roomId;
@@ -200,6 +228,17 @@ function quickJoin(roomId) {
 socket.on('roomUpdate', (room) => {
   currentRoom = room;
   document.getElementById('room-id-display').textContent = room.name ? `${room.name} (${room.id})` : room.id;
+
+  // Settings bar
+  const s = room.settings || {};
+  const settingsBar = document.getElementById('room-settings-bar');
+  if (settingsBar && s.smallBlind) {
+    settingsBar.innerHTML =
+      `<span class="stag">${t('blinds')}: ${s.smallBlind}/${s.bigBlind}</span>` +
+      `<span class="stag">${t('chips')}: ${s.startingChips}</span>` +
+      `<span class="stag">${t('maxPlayers')}: ${s.maxPlayers}</span>` +
+      `<span class="stag">${t('turnTime')}: ${s.turnTime}s</span>`;
+  }
   const sidebarLabel = document.getElementById('sidebar-room-label');
   if (sidebarLabel) sidebarLabel.textContent = room.name || room.id;
 
@@ -270,22 +309,22 @@ socket.on('gameUpdate', (game) => {
 });
 
 // Seat positions around the poker-table area (percentages)
-function getSeatPositions() {
+// Dynamic positioning based on player count for better distribution
+function getSeatPositions(count) {
   const isMobile = window.innerWidth < 768;
-  if (isMobile) {
-    return [
-      { top: 82, left: 50 },   // 0: bottom center (me)
-      { top: 74, left: 10 },   // 1: bottom left
-      { top: 52, left: 3 },    // 2: mid left
-      { top: 22, left: 10 },   // 3: top left
-      { top: 7,  left: 32 },   // 4: top left-center
-      { top: 7,  left: 68 },   // 5: top right-center
-      { top: 22, left: 90 },   // 6: top right
-      { top: 52, left: 97 },   // 7: mid right
-      { top: 74, left: 90 },   // 8: bottom right
-    ];
-  }
-  return [
+
+  // Full 9-seat layouts
+  const all9 = isMobile ? [
+    { top: 82, left: 50 },   // 0: bottom center (me)
+    { top: 74, left: 10 },   // 1: bottom left
+    { top: 52, left: 3 },    // 2: mid left
+    { top: 22, left: 10 },   // 3: top left
+    { top: 7,  left: 32 },   // 4: top left-center
+    { top: 7,  left: 68 },   // 5: top right-center
+    { top: 22, left: 90 },   // 6: top right
+    { top: 52, left: 97 },   // 7: mid right
+    { top: 74, left: 90 },   // 8: bottom right
+  ] : [
     { top: 85, left: 50 },   // 0: bottom center (me)
     { top: 75, left: 15 },   // 1: bottom left
     { top: 48, left: 6 },    // 2: mid left
@@ -296,6 +335,39 @@ function getSeatPositions() {
     { top: 48, left: 94 },   // 7: mid right
     { top: 75, left: 85 },   // 8: bottom right
   ];
+
+  if (!count || count >= 7) return all9;
+
+  // Optimized layouts for fewer players
+  const mobileLayouts = {
+    2: [{ top: 82, left: 50 }, { top: 15, left: 50 }],
+    3: [{ top: 82, left: 50 }, { top: 22, left: 12 }, { top: 22, left: 88 }],
+    4: [{ top: 82, left: 50 }, { top: 52, left: 5 }, { top: 15, left: 50 }, { top: 52, left: 95 }],
+    5: [{ top: 82, left: 50 }, { top: 60, left: 5 }, { top: 18, left: 22 }, { top: 18, left: 78 }, { top: 60, left: 95 }],
+    6: [{ top: 82, left: 50 }, { top: 65, left: 5 }, { top: 22, left: 8 }, { top: 15, left: 50 }, { top: 22, left: 92 }, { top: 65, left: 95 }],
+  };
+  const desktopLayouts = {
+    2: [{ top: 85, left: 50 }, { top: 15, left: 50 }],
+    3: [{ top: 85, left: 50 }, { top: 20, left: 18 }, { top: 20, left: 82 }],
+    4: [{ top: 85, left: 50 }, { top: 48, left: 6 }, { top: 15, left: 50 }, { top: 48, left: 94 }],
+    5: [{ top: 85, left: 50 }, { top: 55, left: 8 }, { top: 18, left: 24 }, { top: 18, left: 76 }, { top: 55, left: 92 }],
+    6: [{ top: 85, left: 50 }, { top: 62, left: 8 }, { top: 20, left: 12 }, { top: 15, left: 50 }, { top: 20, left: 88 }, { top: 62, left: 92 }],
+  };
+
+  const layouts = isMobile ? mobileLayouts : desktopLayouts;
+  return layouts[count] || all9;
+}
+
+// Calculate bet chip position between seat and table center
+function getBetChipPosition(seatPos) {
+  const centerX = 50, centerY = 42;
+  const dx = centerX - seatPos.left;
+  const dy = centerY - seatPos.top;
+  const factor = 0.38;
+  return {
+    top: seatPos.top + dy * factor,
+    left: seatPos.left + dx * factor
+  };
 }
 
 function renderGame(game) {
@@ -307,44 +379,111 @@ function renderGame(game) {
       ordered.push(game.players[(myIndex + i) % game.players.length]);
     }
   } else {
-    // Spectator - show all players as-is
     ordered.push(...game.players);
   }
 
-  // Seats
-  const seatPositions = getSeatPositions();
+  // Dynamic seat positions based on player count
+  const seatPositions = getSeatPositions(ordered.length);
   const seatsEl = document.getElementById('seats');
-  seatsEl.innerHTML = ordered.map((p, i) => {
+
+  const SEAT_TIMER_R = 21;
+  const SEAT_TIMER_C = 2 * Math.PI * SEAT_TIMER_R;
+
+  // Build last-action map from actionLog (ignore stage entries)
+  const lastActions = {};
+  if (game.actionLog) {
+    for (const entry of game.actionLog) {
+      if (entry.playerId && entry.action !== 'stage') {
+        lastActions[entry.playerId] = entry;
+      }
+    }
+  }
+
+  let seatsHtml = '';
+
+  ordered.forEach((p, i) => {
     const pos = seatPositions[i];
+    const isMe = i === 0 && myIndex >= 0;
     const classes = ['seat'];
     if (p.isCurrent) classes.push('current');
     if (p.folded) classes.push('folded');
+    if (isMe) classes.push('is-me');
 
     let badge = '';
     if (p.isDealer) badge = '<span class="seat-badge dealer">D</span>';
     else if (p.isSB) badge = '<span class="seat-badge sb">SB</span>';
     else if (p.isBB) badge = '<span class="seat-badge bb">BB</span>';
 
-    const cardsHtml = renderPlayerCards(p, game.stage);
+    const cardsHtml = renderPlayerCards(p);
 
-    return `
-      <div class="${classes.join(' ')}" style="top:${pos.top}%;left:${pos.left}%">
+    // Avatar with timer ring only on MY seat when it's my turn
+    let avatarHtml;
+    const hasTimer = isMe && p.isCurrent && game.turnDeadline && game.stage !== 'showdown' && game.stage !== 'finished';
+    if (hasTimer) {
+      avatarHtml = `<div class="seat-avatar-wrapper">
+        <svg class="seat-timer-svg" viewBox="0 0 48 48">
+          <circle cx="24" cy="24" r="${SEAT_TIMER_R}" class="seat-timer-bg"/>
+          <circle cx="24" cy="24" r="${SEAT_TIMER_R}" class="seat-timer-fg" id="seat-timer-fg"
+            stroke-dasharray="${SEAT_TIMER_C}" stroke-dashoffset="0"/>
+        </svg>
+        <div class="seat-avatar">${p.avatar || '😎'}</div>
+      </div>`;
+    } else {
+      avatarHtml = `<div class="seat-avatar">${p.avatar || '😎'}</div>`;
+    }
+
+    // YOU badge for my seat
+    const youBadge = isMe ? '<div class="seat-you-badge">YOU</div>' : '';
+
+    // Last action label (show on other players, not on current turn player)
+    let actionLabel = '';
+    const la = lastActions[p.id];
+    if (la && !p.isCurrent) {
+      const actionColors = { fold: 'act-fold', call: 'act-call', check: 'act-check', raise: 'act-raise', allin: 'act-allin' };
+      const actionKey = la.action.toLowerCase().replace(/\s/g, '');
+      const cls = actionColors[actionKey] || 'act-default';
+      const amountStr = la.amount ? ` ${la.amount}` : '';
+      actionLabel = `<div class="seat-action ${cls}">${la.action}${amountStr}</div>`;
+    }
+
+    seatsHtml += `
+      <div class="${classes.join(' ')}" data-pid="${p.id}" style="top:${pos.top}%;left:${pos.left}%">
         <div class="seat-info">
           ${badge}
-          <div class="seat-avatar">${p.avatar || '😎'}</div>
+          ${avatarHtml}
           <div class="seat-name">${esc(p.name)}</div>
           <div class="seat-chips">${p.chips}</div>
-          ${p.bet > 0 ? `<div class="seat-bet">${t('bet')}: ${p.bet}</div>` : ''}
-          ${p.allIn ? '<div class="seat-bet" style="color:#e94560">ALL-IN</div>' : ''}
+          ${youBadge}
+          ${p.allIn ? '<div class="seat-status-allin">ALL-IN</div>' : ''}
+          ${actionLabel}
         </div>
-        <div class="seat-cards">${cardsHtml}</div>
+        <div class="seat-cards">
+          ${cardsHtml}
+        </div>
       </div>
     `;
+  });
+
+  seatsEl.innerHTML = seatsHtml;
+
+  // Reset card count tracking on new hand
+  if (game.stage === 'preflop' && lastGameStage !== 'preflop') {
+    lastCommunityCardCount = 0;
+  }
+
+  // Community cards with staggered animation for new cards
+  const ccEl = document.getElementById('community-cards');
+  const prevCount = lastCommunityCardCount;
+  lastCommunityCardCount = game.communityCards.length;
+
+  ccEl.innerHTML = game.communityCards.map((c, i) => {
+    const isNew = i >= prevCount;
+    const delay = isNew ? (i - prevCount) * 0.15 : 0;
+    const animClass = isNew ? ' card-anim' : '';
+    return renderCard(c, animClass, delay);
   }).join('');
 
-  // Community cards
-  const ccEl = document.getElementById('community-cards');
-  ccEl.innerHTML = game.communityCards.map(c => renderCard(c)).join('');
+  lastGameStage = game.stage;
 
   // Pot
   document.getElementById('pot-display').textContent = `${t('pot')}: ${game.pot}`;
@@ -362,7 +501,6 @@ function renderGame(game) {
 
 function renderPlayerCards(player) {
   if (!player.hand) {
-    // Hidden cards
     if (!player.folded) {
       return '<div class="card face-down"></div><div class="card face-down"></div>';
     }
@@ -371,10 +509,12 @@ function renderPlayerCards(player) {
   return player.hand.map(c => renderCard(c)).join('');
 }
 
-function renderCard(card) {
+function renderCard(card, extraClass, delay) {
   const suitSymbols = { hearts: '\u2665', diamonds: '\u2666', clubs: '\u2663', spades: '\u2660' };
   const suitClass = card.suit;
-  return `<div class="card face-up ${suitClass}">${card.rank}${suitSymbols[card.suit]}</div>`;
+  const cls = extraClass || '';
+  const delayStyle = delay ? ` style="animation-delay:${delay}s"` : '';
+  return `<div class="card face-up ${suitClass}${cls}"${delayStyle}>${card.rank}${suitSymbols[card.suit]}</div>`;
 }
 
 function renderActions(game) {
@@ -485,65 +625,62 @@ function doAction(action) {
 // ============================================
 socket.on('handFinished', (result) => {
   stopTimer();
+
+  // Highlight winner seats on the table
+  if (result.winners) {
+    result.winners.forEach(w => {
+      const seatEl = document.querySelector(`.seat[data-pid="${w.playerId}"]`);
+      if (seatEl) seatEl.classList.add('winner');
+    });
+  }
+
   const overlay = document.getElementById('result-overlay');
-  const textEl = document.getElementById('result-text');
-  const detailsEl = document.getElementById('result-details');
+  let html = '';
 
   if (result.reason === 'others_folded') {
     const w = result.winners[0];
-    const p = currentGame?.players.find(p => p.id === w.playerId);
-    const name = p?.name || 'Unknown';
-    const avatar = p?.avatar || '😎';
-    textEl.textContent = t('winner');
-    detailsEl.innerHTML = `
-      <div class="result-player">
-        <span class="result-avatar">${avatar}</span>
-        <span class="result-name">${esc(name)}</span>
-      </div>
-      <div class="result-chips">+${w.amount} ${t('chips')}</div>
-      <div class="result-reason">${t('othersFolded')}</div>`;
+    const p = currentGame?.players.find(pl => pl.id === w.playerId);
+    html = `
+      <div class="result-bar-winner">
+        <span class="result-bar-crown">👑</span>
+        <span class="result-bar-avatar">${p?.avatar || '😎'}</span>
+        <span class="result-bar-name">${esc(p?.name || 'Unknown')}</span>
+        <span class="result-bar-amount">+${w.amount}</span>
+        <span class="result-bar-reason">${t('othersFolded')}</span>
+      </div>`;
   } else {
-    textEl.textContent = t('showdown');
-
-    // Community cards
-    const ccHtml = currentGame?.communityCards?.length
-      ? `<div class="result-community">
-          <div class="result-section-label">${t('communityCards')}</div>
-          <div class="result-cards">${currentGame.communityCards.map(c => renderCard(c)).join('')}</div>
-        </div>`
-      : '';
-
-    // All players' hands (not folded)
-    const playersHtml = currentGame?.players
+    // Showdown - horizontal cards for each player
+    const handsHtml = currentGame?.players
       .filter(p => !p.folded && p.hand)
       .map(p => {
         const isWinner = result.winners.some(w => w.playerId === p.id);
         const handName = result.hands?.[p.id] || '';
         const winAmount = result.winners.filter(w => w.playerId === p.id).reduce((s, w) => s + w.amount, 0);
         return `
-          <div class="result-player-hand ${isWinner ? 'is-winner' : 'is-loser'}">
-            <div class="result-player-info">
-              <span class="result-avatar-sm">${p.avatar || '😎'}</span>
-              <span class="result-name-sm">${esc(p.name)}</span>
-              ${isWinner ? `<span class="result-win-amount">+${winAmount}</span>` : ''}
+          <div class="result-hand-item ${isWinner ? 'is-winner' : 'is-loser'}">
+            <span class="rhi-avatar">${p.avatar || '😎'}</span>
+            <div class="rhi-info">
+              <span class="rhi-name">${esc(p.name)}${isWinner ? ' 👑' : ''}</span>
+              <span class="rhi-hand">${handName}</span>
             </div>
-            <div class="result-cards">${p.hand.map(c => renderCard(c)).join('')}</div>
-            <div class="result-hand-name">${handName}</div>
+            <div class="rhi-cards">${p.hand.map(c => renderCard(c)).join('')}</div>
+            ${isWinner ? `<span class="rhi-amount">+${winAmount}</span>` : ''}
           </div>`;
       }).join('') || '';
 
-    detailsEl.innerHTML = ccHtml + '<div class="result-players-list">' + playersHtml + '</div>';
+    html = `
+      <div class="result-bar-title">${t('showdown')}</div>
+      <div class="result-bar-hands">${handsHtml}</div>`;
   }
 
-  // Reset ready button
-  const btnReady = document.getElementById('btn-ready-next');
-  btnReady.textContent = isSpectator ? t('joinReady') : t('ready');
-  btnReady.disabled = false;
-  btnReady.classList.remove('btn-waiting');
+  html += `
+    <div class="result-bar-footer">
+      <div id="ready-countdown" class="ready-countdown"></div>
+      <div id="ready-status" class="ready-status"></div>
+      <button id="btn-ready-next" class="btn-ready-next" onclick="readyNextHand()">${isSpectator ? t('joinReady') : t('ready')}</button>
+    </div>`;
 
-  // Clear ready status
-  document.getElementById('ready-status').innerHTML = '';
-
+  overlay.innerHTML = html;
   overlay.style.display = 'flex';
 });
 
@@ -576,6 +713,8 @@ function stopReadyCountdown() {
 function closeResult() {
   stopReadyCountdown();
   document.getElementById('result-overlay').style.display = 'none';
+  // Clear winner celebration effects from table
+  document.querySelectorAll('.seat.winner').forEach(el => el.classList.remove('winner'));
 }
 
 // Spectator mode
@@ -798,28 +937,40 @@ function startTimer(game) {
 
   el.style.display = 'flex';
   const totalTime = game.turnTime || 30;
+  const SEAT_R = 21;
+  const SEAT_C = 2 * Math.PI * SEAT_R;
 
   timerInterval = setInterval(() => {
-    const ring = document.getElementById('gt-ring-fg');
-    const text = document.getElementById('gt-text');
-    if (!ring || !text) return;
+    const globalRing = document.getElementById('gt-ring-fg');
+    const globalText = document.getElementById('gt-text');
+    const seatRing = document.getElementById('seat-timer-fg');
 
     const now = Date.now();
     const remaining = Math.max(0, game.turnDeadline - now);
     const seconds = Math.ceil(remaining / 1000);
     const pct = remaining / (totalTime * 1000);
 
-    ring.setAttribute('stroke-dashoffset', GT_C * (1 - pct));
-    text.textContent = seconds;
+    // Update global timer (pot area)
+    if (globalRing && globalText) {
+      globalRing.setAttribute('stroke-dashoffset', GT_C * (1 - pct));
+      globalText.textContent = seconds;
+      globalRing.classList.remove('warning', 'danger');
+      if (pct <= 0.2) globalRing.classList.add('danger');
+      else if (pct <= 0.5) globalRing.classList.add('warning');
+    }
 
-    ring.classList.remove('warning', 'danger');
-    if (pct <= 0.2) ring.classList.add('danger');
-    else if (pct <= 0.5) ring.classList.add('warning');
+    // Update seat avatar timer ring
+    if (seatRing) {
+      seatRing.setAttribute('stroke-dashoffset', SEAT_C * (1 - pct));
+      seatRing.classList.remove('timer-warning', 'timer-danger');
+      if (pct <= 0.2) seatRing.classList.add('timer-danger');
+      else if (pct <= 0.5) seatRing.classList.add('timer-warning');
+    }
 
     if (remaining <= 0) {
       stopTimer();
-      text.textContent = '0';
-      ring.setAttribute('stroke-dashoffset', GT_C);
+      if (globalText) globalText.textContent = '0';
+      if (globalRing) globalRing.setAttribute('stroke-dashoffset', GT_C);
     }
   }, 200);
 }

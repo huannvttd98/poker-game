@@ -10,6 +10,12 @@ const LANGS = {
     // Lobby
     editProfile: 'Sua',
     roomNameOpt: 'Ten phong (tuy chon)',
+    roomSettings: 'Cai dat phong',
+    startingChips: 'Chips ban dau',
+    blinds: 'Small / Big Blind',
+    maxPlayers: 'So nguoi choi toi da',
+    turnTime: 'Thoi gian moi luot (giay)',
+
     createRoom: 'Tao phong',
     roomCode: 'Ma phong',
     join: 'Vao',
@@ -105,6 +111,12 @@ const LANGS = {
     enterLobby: 'Enter Lobby',
     editProfile: 'Edit',
     roomNameOpt: 'Room name (optional)',
+    roomSettings: 'Room Settings',
+    startingChips: 'Starting chips',
+    blinds: 'Small / Big Blind',
+    maxPlayers: 'Max players',
+    turnTime: 'Turn time (seconds)',
+
     createRoom: 'Create Room',
     roomCode: 'Room code',
     join: 'Join',

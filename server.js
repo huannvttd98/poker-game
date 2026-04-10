@@ -100,15 +100,28 @@ function clampChips(val) {
   return Math.max(100, Math.min(5000, n));
 }
 
-function createRoom(roomId, hostId, hostName, chips, avatar, roomName) {
+function sanitizeSettings(s) {
+  const raw = s || {};
+  const startingChips = [1000, 2000, 3000, 5000, 10000].includes(parseInt(raw.startingChips)) ? parseInt(raw.startingChips) : 5000;
+  const validBlinds = { '5/10': [5, 10], '10/20': [10, 20], '25/50': [25, 50], '50/100': [50, 100] };
+  const blindKey = `${raw.smallBlind}/${raw.bigBlind}`;
+  const [smallBlind, bigBlind] = validBlinds[blindKey] || [10, 20];
+  const maxPlayers = [2, 4, 6, 9].includes(parseInt(raw.maxPlayers)) ? parseInt(raw.maxPlayers) : 9;
+  const turnTime = [10, 15, 18, 30, 60].includes(parseInt(raw.turnTime)) ? parseInt(raw.turnTime) : 18;
+  return { startingChips, smallBlind, bigBlind, maxPlayers, turnTime };
+}
+
+function createRoom(roomId, hostId, hostName, avatar, roomName, settings) {
+  const s = sanitizeSettings(settings);
   const room = {
     id: roomId,
     name: roomName || '',
     hostId,
+    settings: s,
     players: [{
       id: hostId,
       name: hostName,
-      chips: clampChips(chips),
+      chips: s.startingChips,
       avatar: avatar || '😎',
       ready: false,
       connected: true
@@ -124,13 +137,13 @@ function getRoom(roomId) {
   return rooms.get(roomId);
 }
 
-function addPlayer(room, playerId, playerName, chips, avatar) {
-  if (room.players.length >= 9) return null;
+function addPlayer(room, playerId, playerName, avatar) {
+  if (room.players.length >= room.settings.maxPlayers) return null;
   if (room.players.find(p => p.id === playerId)) return null;
   const player = {
     id: playerId,
     name: playerName,
-    chips: clampChips(chips),
+    chips: room.settings.startingChips,
     avatar: avatar || '😎',
     ready: false,
     connected: true
@@ -185,8 +198,8 @@ function startGame(room) {
   const sbIndex = numPlayers === 2 ? dealerIndex : (dealerIndex + 1) % numPlayers;
   const bbIndex = (sbIndex + 1) % numPlayers;
 
-  const smallBlind = 10;
-  const bigBlind = 20;
+  const smallBlind = room.settings.smallBlind;
+  const bigBlind = room.settings.bigBlind;
 
   // Post blinds
   const sbAmount = Math.min(smallBlind, gamePlayers[sbIndex].chips);
@@ -221,8 +234,8 @@ function startGame(room) {
     smallBlindAmount: smallBlind,
     bigBlindAmount: bigBlind,
     actionLog: [
-      { player: gamePlayers[sbIndex].name, action: 'Small Blind', amount: sbAmount },
-      { player: gamePlayers[bbIndex].name, action: 'Big Blind', amount: bbAmount }
+      { player: gamePlayers[sbIndex].name, playerId: gamePlayers[sbIndex].id, action: 'Small Blind', amount: sbAmount },
+      { player: gamePlayers[bbIndex].name, playerId: gamePlayers[bbIndex].id, action: 'Big Blind', amount: bbAmount }
     ]
   };
 
@@ -239,7 +252,8 @@ function startTurnTimer(room) {
   const game = room.game;
   if (!game || game.stage === 'showdown' || game.stage === 'finished') return;
 
-  game.turnDeadline = Date.now() + TURN_TIME * 1000;
+  const turnTime = room.settings ? room.settings.turnTime : TURN_TIME;
+  game.turnDeadline = Date.now() + turnTime * 1000;
 
   room._turnTimer = setTimeout(() => {
     if (!room.game || room.game !== game) return;
@@ -261,7 +275,7 @@ function startTurnTimer(room) {
 
     writeLog('AUTO_FOLD', { roomId: room.id, player: currentPlayer.name });
     console.log(`[Timer] Auto-fold ${currentPlayer.name} in room ${room.id}`);
-  }, TURN_TIME * 1000);
+  }, turnTime * 1000);
 }
 
 function clearTurnTimer(room) {
@@ -376,7 +390,7 @@ function handleAction(room, playerId, action, amount = 0) {
   }
 
   // Log action
-  const logEntry = { player: player.name, action };
+  const logEntry = { player: player.name, playerId: player.id, action };
   if (action === 'call') logEntry.amount = game.currentBet - (player.bet - (game.currentBet - player.bet));
   if (action === 'raise') logEntry.amount = amount;
   if (action === 'allin') logEntry.amount = player.totalBet;
@@ -616,7 +630,7 @@ function checkGameWinner(room) {
     // Reset room after showing winner
     setTimeout(() => {
       if (!rooms.has(room.id)) return;
-      room.players.forEach(p => { p.chips = 5000; p.ready = false; p.spectator = false; });
+      room.players.forEach(p => { p.chips = room.settings.startingChips; p.ready = false; p.spectator = false; });
       io.to(room.id).emit('roomUpdate', getRoomState(room));
       io.to(room.id).emit('backToLobby');
       broadcastRoomList();
@@ -740,7 +754,7 @@ function getGameStateForPlayer(room, playerId) {
     smallBlindIndex: game.smallBlindIndex,
     bigBlindIndex: game.bigBlindIndex,
     minRaise: game.minRaise,
-    turnTime: TURN_TIME,
+    turnTime: room.settings ? room.settings.turnTime : TURN_TIME,
     turnDeadline: game.turnDeadline || null,
     actionLog: game.actionLog || [],
     result: game.result || null,
@@ -782,6 +796,7 @@ function getRoomState(room) {
     id: room.id,
     name: room.name || '',
     hostId: room.hostId,
+    settings: room.settings,
     status: room.status,
     players: room.players.map(p => ({
       id: p.id,
@@ -806,8 +821,9 @@ function getRoomList() {
       name: room.name || '',
       hostName: room.players.find(p => p.id === room.hostId)?.name || '???',
       playerCount: room.players.length,
-      maxPlayers: 9,
-      status: room.status
+      maxPlayers: room.settings.maxPlayers,
+      status: room.status,
+      bigBlind: room.settings.bigBlind
     });
   }
   return list;
@@ -827,26 +843,26 @@ io.on('connection', (socket) => {
   socket.emit('roomList', getRoomList());
 
   // Create room
-  socket.on('createRoom', ({ playerName, chips, avatar, roomName }, callback) => {
+  socket.on('createRoom', ({ playerName, avatar, roomName, settings }, callback) => {
     const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     const playerId = socket.id;
-    const room = createRoom(roomId, playerId, playerName, chips, avatar, roomName);
+    const room = createRoom(roomId, playerId, playerName, avatar, roomName, settings);
     playerSockets.set(socket.id, { roomId, playerId });
     socket.join(roomId);
     callback({ success: true, roomId, playerId });
     io.to(roomId).emit('roomUpdate', getRoomState(room));
     broadcastRoomList();
-    writeLog('ROOM_CREATE', { roomId, player: playerName, chips: clampChips(chips) });
+    writeLog('ROOM_CREATE', { roomId, player: playerName, settings: room.settings });
     console.log(`[Room] ${playerName} created room ${roomId}`);
   });
 
   // Join room
-  socket.on('joinRoom', ({ roomId, playerName, chips, avatar }, callback) => {
+  socket.on('joinRoom', ({ roomId, playerName, avatar }, callback) => {
     const room = getRoom(roomId);
     if (!room) return callback({ error: 'Room not found' });
 
     const playerId = socket.id;
-    const player = addPlayer(room, playerId, playerName, chips, avatar);
+    const player = addPlayer(room, playerId, playerName, avatar);
     if (!player) return callback({ error: 'Room is full or already joined' });
 
     const isPlaying = room.status === 'playing';
@@ -868,7 +884,7 @@ io.on('connection', (socket) => {
     }
 
     broadcastRoomList();
-    writeLog('ROOM_JOIN', { roomId, player: playerName, chips: clampChips(chips), spectator: isPlaying });
+    writeLog('ROOM_JOIN', { roomId, player: playerName, chips: room.settings.startingChips, spectator: isPlaying });
     console.log(`[Room] ${playerName} joined room ${roomId}${isPlaying ? ' (spectator)' : ''}`);
   });
 
