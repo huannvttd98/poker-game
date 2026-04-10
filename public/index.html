@@ -376,6 +376,7 @@
         <div class="sidebar-header">
           <button class="btn-exit-game" onclick="exitGame()" data-i18n="exit">Thoat</button>
           <span class="sidebar-room-label" id="sidebar-room-label"></span>
+          <button class="btn-sound-toggle" id="btn-sound" onclick="toggleSound()">&#128264;</button>
           <button class="btn-close-sidebar" onclick="toggleSidebar()">&times;</button>
         </div>
 
@@ -572,8 +573,9 @@
       </div>
     </div>
 
-    <script src="/socket.io/socket.io.js?v=3.4"></script>
-    <script src="i18n.js?v=3.4"></script>
-    <script src="app.js?v=3.4"></script>
+    <script src="/socket.io/socket.io.js?v=3.5"></script>
+    <script src="i18n.js?v=3.5"></script>
+    <script src="sounds.js?v=3.5"></script>
+    <script src="app.js?v=3.5"></script>
   </body>
 </html>

@@ -23,6 +23,15 @@ const AVATARS = [
 // Animation tracking
 let lastCommunityCardCount = 0;
 let lastGameStage = null;
+let lastActionLogLen = 0;
+let timerBeeped = false;
+let wasMyTurn = false;
+
+// Sound toggle
+function toggleSound() {
+  const on = SFX.toggle();
+  document.getElementById('btn-sound').innerHTML = on ? '&#128264;' : '&#128263;';
+}
 
 // ============================================
 // SCREENS
@@ -81,6 +90,7 @@ function editProfile() {
 // Init on load
 initAvatarPicker();
 applyI18n();
+document.getElementById('btn-sound').innerHTML = SFX.enabled ? '&#128264;' : '&#128263;';
 
 // ============================================
 // LOBBY
@@ -302,10 +312,48 @@ socket.on('roomUpdate', (room) => {
 // GAME UPDATE
 // ============================================
 socket.on('gameUpdate', (game) => {
+  const prevGame = currentGame;
   currentGame = game;
   showScreen('game-screen');
   renderGame(game);
   renderRankList();
+
+  // --- Sound triggers ---
+  const me = game.players.find(p => p.id === myId);
+  const isMyTurn = me && me.isCurrent && !me.folded && !me.allIn && game.stage !== 'showdown' && game.stage !== 'finished';
+
+  // Start hand
+  if (game.stage === 'preflop' && (!prevGame || prevGame.stage === 'finished' || prevGame.stage === 'showdown' || !prevGame.stage)) {
+    SFX.startHand();
+  }
+
+  // Community cards revealed
+  const prevCC = prevGame ? prevGame.communityCards.length : 0;
+  if (game.communityCards.length > prevCC && prevCC >= 0) {
+    SFX.communityCard();
+  }
+
+  // Your turn
+  if (isMyTurn && !wasMyTurn) {
+    SFX.yourTurn();
+    timerBeeped = false;
+  }
+  wasMyTurn = isMyTurn;
+
+  // Action sounds from log
+  const log = game.actionLog || [];
+  if (log.length > lastActionLogLen) {
+    const newActions = log.slice(lastActionLogLen);
+    for (const entry of newActions) {
+      const act = entry.action?.toLowerCase();
+      if (act === 'check') SFX.check();
+      else if (act === 'call') SFX.call();
+      else if (act === 'raise') SFX.raise();
+      else if (act === 'fold') SFX.fold();
+      else if (act === 'all-in' || act === 'allin' || act === 'all in') SFX.allIn();
+    }
+  }
+  lastActionLogLen = log.length;
 });
 
 // Seat positions around the poker-table area (percentages)
@@ -625,6 +673,8 @@ function doAction(action) {
 // ============================================
 socket.on('handFinished', (result) => {
   stopTimer();
+  lastActionLogLen = 0;
+  SFX.win();
 
   // Highlight winner seats on the table
   if (result.winners) {
@@ -762,6 +812,7 @@ socket.on('gameWon', (data) => {
   stopTimer();
   stopReadyCountdown();
   closeResult();
+  SFX.gameWon();
 
   const overlay = document.getElementById('game-won-overlay');
   const isMe = data.winner.id === myId;
@@ -967,6 +1018,15 @@ function startTimer(game) {
       else if (pct <= 0.5) seatRing.classList.add('timer-warning');
     }
 
+    // Timer low beep (5s left, my turn only)
+    if (seconds <= 5 && seconds > 0 && !timerBeeped) {
+      const me = currentGame?.players.find(p => p.id === myId);
+      if (me && me.isCurrent) {
+        SFX.timerLow();
+        timerBeeped = true;
+      }
+    }
+
     if (remaining <= 0) {
       stopTimer();
       if (globalText) globalText.textContent = '0';
@@ -1112,6 +1172,7 @@ socket.on('chatMessage', (msg) => {
   list.appendChild(div);
   list.scrollTop = list.scrollHeight;
 
+  if (!isMe) SFX.chatMsg();
   if (!isChatVisible()) {
     unreadChat++;
     updateChatBadge();
