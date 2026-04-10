@@ -766,7 +766,7 @@ function getGameStateForPlayer(room, playerId) {
       bet: p.bet,
       folded: p.folded,
       allIn: p.allIn,
-      hand: (p.id === playerId || game.stage === 'showdown' || game.stage === 'finished')
+      hand: (p.id === playerId || (game.stage === 'showdown' && !p.folded))
         ? p.hand
         : null,
       isDealer: i === game.dealerIndex,

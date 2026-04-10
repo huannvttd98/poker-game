@@ -24,7 +24,7 @@ const AVATARS = [
 let lastCommunityCardCount = 0;
 let lastGameStage = null;
 let lastActionLogLen = 0;
-let timerBeeped = false;
+let lastBeepSecond = 0;
 let wasMyTurn = false;
 
 // Sound toggle
@@ -336,7 +336,7 @@ socket.on('gameUpdate', (game) => {
   // Your turn
   if (isMyTurn && !wasMyTurn) {
     SFX.yourTurn();
-    timerBeeped = false;
+    lastBeepSecond = 0;
   }
   wasMyTurn = isMyTurn;
 
@@ -1018,12 +1018,12 @@ function startTimer(game) {
       else if (pct <= 0.5) seatRing.classList.add('timer-warning');
     }
 
-    // Timer low beep (5s left, my turn only)
-    if (seconds <= 5 && seconds > 0 && !timerBeeped) {
+    // Countdown beep every second from 5s to 1s (my turn only)
+    if (seconds <= 5 && seconds > 0 && seconds !== lastBeepSecond) {
       const me = currentGame?.players.find(p => p.id === myId);
       if (me && me.isCurrent) {
-        SFX.timerLow();
-        timerBeeped = true;
+        SFX.timerLow(seconds);
+        lastBeepSecond = seconds;
       }
     }
 

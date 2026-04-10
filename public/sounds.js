@@ -203,18 +203,23 @@ const SFX = (() => {
     osc.stop(ac.currentTime + 0.1);
   }
 
-  function timerLow(ac) {
-    // Urgent beep
+  function timerLow(ac, seconds) {
+    // Countdown beep - pitch rises as time runs out
+    const freqMap = { 5: 600, 4: 700, 3: 800, 2: 900, 1: 1100 };
+    const volMap  = { 5: 0.05, 4: 0.06, 3: 0.07, 2: 0.08, 1: 0.10 };
+    const freq = freqMap[seconds] || 880;
+    const vol  = volMap[seconds] || 0.07;
+
     const osc = ac.createOscillator();
     const gain = ac.createGain();
     osc.connect(gain);
     gain.connect(ac.destination);
     osc.type = 'square';
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.07, ac.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.1);
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(vol, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.12);
     osc.start();
-    osc.stop(ac.currentTime + 0.12);
+    osc.stop(ac.currentTime + 0.15);
   }
 
   function communityCard(ac) {
@@ -261,7 +266,7 @@ const SFX = (() => {
     win:           () => play(win),
     gameWon:       () => play(gameWon),
     chatMsg:       () => play(chatMsg),
-    timerLow:      () => play(timerLow),
+    timerLow:      (s) => play((ac) => timerLow(ac, s)),
     communityCard: () => play(communityCard),
     startHand:     () => play(startHand),
 
