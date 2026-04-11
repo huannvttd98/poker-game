@@ -106,6 +106,18 @@ function determineWinners(handResults) {
 // ============================================
 const MAX_LOG_HANDS = 5;
 
+function mergeWinners(winners) {
+  const map = {};
+  for (const w of winners) {
+    if (map[w.playerId]) {
+      map[w.playerId].amount += w.amount;
+    } else {
+      map[w.playerId] = { ...w };
+    }
+  }
+  return Object.values(map);
+}
+
 function trimActionLog(log) {
   // Find positions of 'newhand' entries and keep only the last MAX_LOG_HANDS hands
   const handStarts = [];
@@ -290,10 +302,8 @@ function startTurnTimer(room) {
     // Auto fold
     const result = handleAction(room, currentPlayer.id, 'fold');
 
-    // Broadcast updated state
-    for (const p of game.players) {
-      io.to(p.id).emit('gameUpdate', getGameStateForPlayer(room, p.id));
-    }
+    // Broadcast updated state (including spectators)
+    broadcastGameState(room);
 
     if (result.finished) {
       io.to(room.id).emit('roomUpdate', getRoomState(room));
@@ -626,7 +636,7 @@ function showdown(room) {
   }
 
   game.result = result;
-  game.actionLog.push({ action: 'result', winners: result.winners });
+  game.actionLog.push({ action: 'result', winners: mergeWinners(result.winners) });
   room.status = 'waiting';
   writeLog('HAND_END', { roomId: room.id, reason: 'showdown', winners: result.winners, hands: result.hands });
   syncChips(room);

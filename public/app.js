@@ -441,11 +441,16 @@ function renderGame(game) {
   const SEAT_TIMER_R = 21;
   const SEAT_TIMER_C = 2 * Math.PI * SEAT_TIMER_R;
 
-  // Build last-action map from actionLog (ignore stage entries)
+  // Build last-action map from actionLog (current hand only)
   const lastActions = {};
   if (game.actionLog) {
-    for (const entry of game.actionLog) {
-      if (entry.playerId && entry.action !== 'stage') {
+    let currentHandStart = 0;
+    for (let i = game.actionLog.length - 1; i >= 0; i--) {
+      if (game.actionLog[i].action === 'newhand') { currentHandStart = i + 1; break; }
+    }
+    for (let i = currentHandStart; i < game.actionLog.length; i++) {
+      const entry = game.actionLog[i];
+      if (entry.playerId && entry.action !== 'stage' && entry.action !== 'result') {
         lastActions[entry.playerId] = entry;
       }
     }
