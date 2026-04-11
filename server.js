@@ -66,12 +66,20 @@ function shuffle(array) {
 // Hand evaluation using pokersolver
 const Hand = require('pokersolver').Hand;
 
+const solverSuitMap = { hearts: 'h', diamonds: 'd', clubs: 'c', spades: 's' };
+const reverseSuitMap = { h: 'hearts', d: 'diamonds', c: 'clubs', s: 'spades' };
+
 function cardToSolverFormat(card) {
   const rankMap = { '10': 'T' };
-  const suitMap = { hearts: 'h', diamonds: 'd', clubs: 'c', spades: 's' };
   const r = rankMap[card.rank] || card.rank;
-  const s = suitMap[card.suit];
+  const s = solverSuitMap[card.suit];
   return r + s;
+}
+
+function solverCardToGame(sc) {
+  const rank = sc.value === 'T' ? '10' : sc.value;
+  const suit = reverseSuitMap[sc.suit];
+  return { rank, suit };
 }
 
 function evaluateHands(players, communityCards) {
@@ -80,7 +88,8 @@ function evaluateHands(players, communityCards) {
     if (p.folded) continue;
     const allCards = [...p.hand, ...communityCards].map(cardToSolverFormat);
     const solved = Hand.solve(allCards);
-    results.push({ playerId: p.id, hand: solved, name: solved.descr });
+    const bestCards = solved.cards.map(solverCardToGame);
+    results.push({ playerId: p.id, hand: solved, name: solved.descr, bestCards });
   }
   return results;
 }
@@ -90,6 +99,21 @@ function determineWinners(handResults) {
   const hands = handResults.map(r => r.hand);
   const winning = Hand.winners(hands);
   return handResults.filter(r => winning.includes(r.hand));
+}
+
+// ============================================
+// ACTION LOG UTILS
+// ============================================
+const MAX_LOG_HANDS = 5;
+
+function trimActionLog(log) {
+  // Find positions of 'newhand' entries and keep only the last MAX_LOG_HANDS hands
+  const handStarts = [];
+  for (let i = 0; i < log.length; i++) {
+    if (log[i].action === 'newhand') handStarts.push(i);
+  }
+  if (handStarts.length <= MAX_LOG_HANDS) return log;
+  return log.slice(handStarts[handStarts.length - MAX_LOG_HANDS]);
 }
 
 // ============================================
@@ -108,7 +132,8 @@ function sanitizeSettings(s) {
   const [smallBlind, bigBlind] = validBlinds[blindKey] || [10, 20];
   const maxPlayers = [2, 4, 6, 9].includes(parseInt(raw.maxPlayers)) ? parseInt(raw.maxPlayers) : 9;
   const turnTime = [10, 15, 18, 30, 60].includes(parseInt(raw.turnTime)) ? parseInt(raw.turnTime) : 18;
-  return { startingChips, smallBlind, bigBlind, maxPlayers, turnTime };
+  const readyTime = [5, 8, 10, 12, 15, 20, 30].includes(parseInt(raw.readyTime)) ? parseInt(raw.readyTime) : 12;
+  return { startingChips, smallBlind, bigBlind, maxPlayers, turnTime, readyTime };
 }
 
 function createRoom(roomId, hostId, hostName, avatar, roomName, settings) {
@@ -234,6 +259,8 @@ function startGame(room) {
     smallBlindAmount: smallBlind,
     bigBlindAmount: bigBlind,
     actionLog: [
+      ...trimActionLog(room.game?.actionLog || []),
+      { action: 'newhand' },
       { player: gamePlayers[sbIndex].name, playerId: gamePlayers[sbIndex].id, action: 'Small Blind', amount: sbAmount },
       { player: gamePlayers[bbIndex].name, playerId: gamePlayers[bbIndex].id, action: 'Big Blind', amount: bbAmount }
     ]
@@ -317,6 +344,9 @@ function handleAction(room, playerId, action, amount = 0) {
   const player = game.players[playerIndex];
   if (player.folded || player.allIn || player.chips <= 0) return { error: 'Cannot act' };
 
+  // Save call amount before player.bet gets modified
+  const callAmountForLog = Math.min(game.currentBet - player.bet, player.chips);
+
   switch (action) {
     case 'fold':
       player.folded = true;
@@ -391,7 +421,7 @@ function handleAction(room, playerId, action, amount = 0) {
 
   // Log action
   const logEntry = { player: player.name, playerId: player.id, action };
-  if (action === 'call') logEntry.amount = game.currentBet - (player.bet - (game.currentBet - player.bet));
+  if (action === 'call') logEntry.amount = callAmountForLog;
   if (action === 'raise') logEntry.amount = amount;
   if (action === 'allin') logEntry.amount = player.totalBet;
   game.actionLog.push(logEntry);
@@ -544,6 +574,7 @@ function finishHand(room) {
 
   game.stage = 'finished';
   game.result = result;
+  game.actionLog.push({ action: 'result', winners: result.winners });
   room.status = 'waiting';
   writeLog('HAND_END', { roomId: room.id, reason: 'others_folded', winners: result.winners });
   syncChips(room);
@@ -559,10 +590,12 @@ function showdown(room) {
 
   const handResults = evaluateHands(game.players, game.communityCards);
   const result = { winners: [], hands: {} };
+  const bestCardsMap = {};
 
   // Store all hands for display
   for (const hr of handResults) {
     result.hands[hr.playerId] = hr.name;
+    bestCardsMap[hr.playerId] = hr.bestCards;
   }
 
   if (game.sidePots.length > 0) {
@@ -576,7 +609,7 @@ function showdown(room) {
         const rp = room.players.find(p => p.id === w.playerId);
         if (gp) gp.chips += share;
         if (rp) rp.chips += share;
-        result.winners.push({ playerId: w.playerId, name: w.name, amount: share, hand: result.hands[w.playerId] });
+        result.winners.push({ playerId: w.playerId, name: w.name, amount: share, hand: result.hands[w.playerId], bestCards: bestCardsMap[w.playerId] });
       }
     }
   } else {
@@ -588,11 +621,12 @@ function showdown(room) {
       const rp = room.players.find(p => p.id === w.playerId);
       if (gp) gp.chips += share;
       if (rp) rp.chips += share;
-      result.winners.push({ playerId: w.playerId, name: w.name, amount: share, hand: result.hands[w.playerId] });
+      result.winners.push({ playerId: w.playerId, name: w.name, amount: share, hand: result.hands[w.playerId], bestCards: bestCardsMap[w.playerId] });
     }
   }
 
   game.result = result;
+  game.actionLog.push({ action: 'result', winners: result.winners });
   room.status = 'waiting';
   writeLog('HAND_END', { roomId: room.id, reason: 'showdown', winners: result.winners, hands: result.hands });
   syncChips(room);
@@ -651,14 +685,15 @@ function prepareNextHand(room) {
   room.status = 'waiting_next';
 
   // Start ready countdown
-  const deadline = Date.now() + READY_TIMEOUT * 1000;
+  const readyTime = room.settings ? room.settings.readyTime : READY_TIMEOUT;
+  const deadline = Date.now() + readyTime * 1000;
   room._readyDeadline = deadline;
   clearReadyTimer(room);
   room._readyTimer = setTimeout(() => {
     autoStartWithReady(room);
-  }, READY_TIMEOUT * 1000);
+  }, readyTime * 1000);
 
-  io.to(room.id).emit('readyCountdown', { deadline, timeout: READY_TIMEOUT });
+  io.to(room.id).emit('readyCountdown', { deadline, timeout: readyTime });
   io.to(room.id).emit('roomUpdate', getRoomState(room));
   broadcastRoomList();
 }

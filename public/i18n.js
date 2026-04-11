@@ -15,6 +15,7 @@ const LANGS = {
     blinds: 'Small / Big Blind',
     maxPlayers: 'So nguoi choi toi da',
     turnTime: 'Thoi gian moi luot (giay)',
+    readyTime: 'TG san sang (giay)',
 
     createRoom: 'Tao phong',
     roomCode: 'Ma phong',
@@ -52,6 +53,7 @@ const LANGS = {
     // Result
     winner: 'Nguoi thang!',
     showdown: 'Showdown!',
+    wins: 'thang',
     othersFolded: 'Doi thu bo bai',
     communityCards: 'Bai chung',
     // Ready countdown
@@ -117,6 +119,7 @@ const LANGS = {
     blinds: 'Small / Big Blind',
     maxPlayers: 'Max players',
     turnTime: 'Turn time (seconds)',
+    readyTime: 'Ready time (seconds)',
 
     createRoom: 'Create Room',
     roomCode: 'Room code',
@@ -149,6 +152,7 @@ const LANGS = {
     allIn: 'All-In',
     winner: 'Winner!',
     showdown: 'Showdown!',
+    wins: 'wins',
     othersFolded: 'Others folded',
     communityCards: 'Community Cards',
     autoStartIn: 'Auto start in {s}s',

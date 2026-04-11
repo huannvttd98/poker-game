@@ -115,6 +115,7 @@ function getRoomSettings() {
     bigBlind: parseInt(blindsVal[1]) || 20,
     maxPlayers: parseInt(document.getElementById('setting-max-players').value) || 9,
     turnTime: parseInt(document.getElementById('setting-turn-time').value) || 18,
+    readyTime: parseInt(document.getElementById('setting-ready-time').value) || 12,
   };
 }
 
@@ -249,7 +250,8 @@ socket.on('roomUpdate', (room) => {
       `<span class="stag">${t('blinds')}: ${s.smallBlind}/${s.bigBlind}</span>` +
       `<span class="stag">${t('chips')}: ${s.startingChips}</span>` +
       `<span class="stag">${t('maxPlayers')}: ${s.maxPlayers}</span>` +
-      `<span class="stag">${t('turnTime')}: ${s.turnTime}s</span>`;
+      `<span class="stag">${t('turnTime')}: ${s.turnTime}s</span>` +
+      `<span class="stag">${t('readyTime')}: ${s.readyTime}s</span>`;
   }
   const sidebarLabel = document.getElementById('sidebar-room-label');
   if (sidebarLabel) sidebarLabel.textContent = room.name || room.id;
@@ -675,7 +677,6 @@ function doAction(action) {
 // ============================================
 socket.on('handFinished', (result) => {
   stopTimer();
-  lastActionLogLen = 0;
   SFX.win();
 
   // Highlight winner seats on the table
@@ -701,13 +702,17 @@ socket.on('handFinished', (result) => {
         <span class="result-bar-reason">${t('othersFolded')}</span>
       </div>`;
   } else {
-    // Showdown - horizontal cards for each player
+    // Showdown - horizontal cards for each player, winners first sorted by amount
     const handsHtml = currentGame?.players
       .filter(p => !p.folded && p.hand)
       .map(p => {
         const isWinner = result.winners.some(w => w.playerId === p.id);
-        const handName = result.hands?.[p.id] || '';
         const winAmount = result.winners.filter(w => w.playerId === p.id).reduce((s, w) => s + w.amount, 0);
+        return { p, isWinner, winAmount };
+      })
+      .sort((a, b) => b.winAmount - a.winAmount)
+      .map(({ p, isWinner, winAmount }) => {
+        const handName = result.hands?.[p.id] || '';
         return `
           <div class="result-hand-item ${isWinner ? 'is-winner' : 'is-loser'}">
             <span class="rhi-avatar">${p.avatar || '😎'}</span>
@@ -1061,8 +1066,21 @@ function renderLog(log) {
   if (!list || !log) return;
 
   list.innerHTML = log.map(entry => {
+    if (entry.action === 'newhand') {
+      return '<div class="log-entry log-newhand">&#9824; New Hand &#9824;</div>';
+    }
     if (entry.action === 'stage') {
       return `<div class="log-entry log-stage">--- ${entry.stage} ---</div>`;
+    }
+    if (entry.action === 'result' && entry.winners) {
+      const lines = [...entry.winners].sort((a, b) => b.amount - a.amount).map(w => {
+        const cardsHtml = w.bestCards
+          ? '<div class="log-best-cards">' + w.bestCards.map(c => renderCard(c, ' card-mini')).join('') + '</div>'
+          : '';
+        const handStr = w.hand ? ' <span class="log-hand">(' + w.hand + ')</span>' : '';
+        return '<div class="log-winner-line">\u{1F451} <span class="log-name">' + esc(w.name) + '</span> ' + t('wins') + ' <span class="log-amount">+' + w.amount + '</span>' + handStr + cardsHtml + '</div>';
+      }).join('');
+      return '<div class="log-entry log-result">' + lines + '</div>';
     }
     const amountStr = entry.amount ? ` <span class="log-amount">${entry.amount}</span>` : '';
     return `<div class="log-entry log-${entry.action}">

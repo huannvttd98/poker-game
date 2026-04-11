@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Poker LAN</title>
-    <link rel="stylesheet" href="style.css?v=3.4" />
+    <link rel="stylesheet" href="style.css?v=3.5" />
   </head>
   <body>
     <!-- LANG SWITCHER -->
@@ -330,6 +330,18 @@
                 <option value="60">60s</option>
               </select>
             </div>
+            <div class="setting-row">
+              <label for="setting-ready-time" data-i18n="readyTime">Thoi gian san sang (giay)</label>
+              <select id="setting-ready-time">
+                <option value="5">5s</option>
+                <option value="8">8s</option>
+                <option value="10">10s</option>
+                <option value="12" selected>12s</option>
+                <option value="15">15s</option>
+                <option value="20">20s</option>
+                <option value="30">30s</option>
+              </select>
+            </div>
           </div>
           <button id="btn-create" onclick="createRoom()" data-i18n="createRoom">Tao phong</button>
           <div class="join-row">
@@ -573,9 +585,9 @@
       </div>
     </div>
 
-    <script src="/socket.io/socket.io.js?v=3.5"></script>
-    <script src="i18n.js?v=3.5"></script>
-    <script src="sounds.js?v=3.5"></script>
-    <script src="app.js?v=3.5"></script>
+    <script src="/socket.io/socket.io.js?v=3.6"></script>
+    <script src="i18n.js?v=3.6"></script>
+    <script src="sounds.js?v=3.6"></script>
+    <script src="app.js?v=3.6"></script>
   </body>
 </html>
