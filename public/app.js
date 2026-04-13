@@ -1082,8 +1082,11 @@ function renderLog(log) {
         const cardsHtml = w.bestCards
           ? '<div class="log-best-cards">' + w.bestCards.map(c => renderCard(c, ' card-mini')).join('') + '</div>'
           : '';
-        const handStr = w.hand ? ' <span class="log-hand">(' + w.hand + ')</span>' : '';
-        return '<div class="log-winner-line">\u{1F451} <span class="log-name">' + esc(w.name) + '</span> ' + t('wins') + ' <span class="log-amount">+' + w.amount + '</span>' + handStr + cardsHtml + '</div>';
+        const handStr = w.hand ? '<span class="log-hand">' + w.hand + '</span>' : '';
+        return '<div class="log-winner-line">'
+          + '<div class="log-winner-row1">\u{1F451} <span class="log-name">' + esc(w.name) + '</span> ' + handStr + '</div>'
+          + '<div class="log-winner-row2"><span class="log-win-text">' + t('wins') + ' <span class="log-amount">+' + w.amount + '</span></span>' + cardsHtml + '</div>'
+          + '</div>';
       }).join('');
       return '<div class="log-entry log-result">' + lines + '</div>';
     }

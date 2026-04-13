@@ -1173,10 +1173,12 @@ button:active {
   background: rgba(255, 215, 0, 0.08); border-top: 1px solid var(--gold);
   padding: 5px 12px; margin-top: 2px;
 }
-.log-winner-line { display: flex; align-items: center; gap: 4px; font-size: 0.65rem; }
+.log-winner-line { display: flex; flex-direction: column; gap: 3px; font-size: 0.65rem; }
+.log-winner-row1 { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.log-winner-row2 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .log-winner-line .log-amount { color: var(--green); font-weight: 700; }
-.log-winner-line .log-hand { color: var(--dim); font-style: italic; font-size: 0.6rem; }
-.log-best-cards { display: flex; gap: 2px; margin-top: 3px; }
+.log-winner-line .log-hand { color: var(--gold); font-style: italic; font-size: 0.6rem; font-weight: 600; }
+.log-best-cards { display: flex; gap: 2px; margin-top: 0; }
 .log-best-cards .card.card-mini {
   width: 22px; height: 30px; font-size: 0.5rem; padding: 1px;
   min-width: unset; animation: none;
