@@ -23,6 +23,74 @@ function writeLog(type, data) {
   fs.appendFile(getLogFile(), line, () => {});
 }
 
+// ============================================
+// IP DAILY CHIPS LIMIT
+// ============================================
+const DAILY_IP_CHIPS_LIMIT = 10000;
+const IP_LIMIT_FILE = path.join(LOG_DIR, 'ip-chips.json');
+const ipChipsToday = new Map(); // ip -> { date: 'YYYY-MM-DD', total: number }
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function loadIpLimits() {
+  try {
+    if (!fs.existsSync(IP_LIMIT_FILE)) return;
+    const data = JSON.parse(fs.readFileSync(IP_LIMIT_FILE, 'utf8'));
+    const today = todayStr();
+    for (const [ip, entry] of Object.entries(data)) {
+      if (entry && entry.date === today) ipChipsToday.set(ip, entry);
+    }
+  } catch (e) {
+    console.error('[IPLimit] Load failed:', e.message);
+  }
+}
+
+let saveTimer = null;
+function saveIpLimits() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    const obj = Object.fromEntries(ipChipsToday);
+    fs.writeFile(IP_LIMIT_FILE, JSON.stringify(obj), () => {});
+  }, 1000);
+}
+
+function getClientIp(socket) {
+  const fwd = socket.handshake.headers['x-forwarded-for'];
+  let ip = fwd ? String(fwd).split(',')[0].trim() : socket.handshake.address;
+  if (ip && ip.startsWith('::ffff:')) ip = ip.slice(7);
+  return ip || 'unknown';
+}
+
+// Cấp tối đa `requested` chips cho IP, không vượt hạn mức ngày.
+// Trả về { granted, remainingAfter, totalUsed }.
+function consumeChipsForIp(ip, requested) {
+  const today = todayStr();
+  let entry = ipChipsToday.get(ip);
+  if (!entry || entry.date !== today) entry = { date: today, total: 0 };
+  const remaining = Math.max(0, DAILY_IP_CHIPS_LIMIT - entry.total);
+  const granted = Math.min(requested, remaining);
+  if (granted > 0) {
+    entry.total += granted;
+    ipChipsToday.set(ip, entry);
+    saveIpLimits();
+  }
+  return { granted, remainingAfter: remaining - granted, totalUsed: entry.total };
+}
+
+loadIpLimits();
+// Dọn entries của ngày cũ mỗi giờ
+setInterval(() => {
+  const today = todayStr();
+  let changed = false;
+  for (const [ip, entry] of ipChipsToday) {
+    if (entry.date !== today) { ipChipsToday.delete(ip); changed = true; }
+  }
+  if (changed) saveIpLimits();
+}, 60 * 60 * 1000);
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -674,7 +742,18 @@ function checkGameWinner(room) {
     // Reset room after showing winner
     setTimeout(() => {
       if (!rooms.has(room.id)) return;
-      room.players.forEach(p => { p.chips = room.settings.startingChips; p.ready = false; p.spectator = false; });
+      room.players.forEach(p => {
+        const sock = io.sockets.sockets.get(p.id);
+        const ip = sock ? getClientIp(sock) : 'unknown';
+        const { granted } = consumeChipsForIp(ip, room.settings.startingChips);
+        p.chips = granted;
+        p.ready = false;
+        p.spectator = granted <= 0;
+        if (granted <= 0) {
+          writeLog('IP_LIMIT_BLOCK', { ip, action: 'playAgain', roomId: room.id, player: p.name });
+          if (sock) sock.emit('errorMsg', `Bạn đã nhận đủ ${DAILY_IP_CHIPS_LIMIT} chips hôm nay, sẽ ở chế độ khán giả.`);
+        }
+      });
       io.to(room.id).emit('roomUpdate', getRoomState(room));
       io.to(room.id).emit('backToLobby');
       broadcastRoomList();
@@ -891,16 +970,24 @@ io.on('connection', (socket) => {
 
   // Create room
   socket.on('createRoom', ({ playerName, avatar, roomName, settings }, callback) => {
+    const sanitized = sanitizeSettings(settings);
+    const ip = getClientIp(socket);
+    const { granted, totalUsed } = consumeChipsForIp(ip, sanitized.startingChips);
+    if (granted <= 0) {
+      writeLog('IP_LIMIT_BLOCK', { ip, action: 'createRoom', requested: sanitized.startingChips, totalUsed });
+      return callback({ error: `Bạn đã nhận đủ ${DAILY_IP_CHIPS_LIMIT} chips hôm nay. Thử lại sau 00:00.` });
+    }
     const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     const playerId = socket.id;
     const room = createRoom(roomId, playerId, playerName, avatar, roomName, settings);
+    room.players[0].chips = granted;
     playerSockets.set(socket.id, { roomId, playerId });
     socket.join(roomId);
     callback({ success: true, roomId, playerId });
     io.to(roomId).emit('roomUpdate', getRoomState(room));
     broadcastRoomList();
-    writeLog('ROOM_CREATE', { roomId, player: playerName, settings: room.settings });
-    console.log(`[Room] ${playerName} created room ${roomId}`);
+    writeLog('ROOM_CREATE', { roomId, player: playerName, ip, chips: granted, requested: sanitized.startingChips, settings: room.settings });
+    console.log(`[Room] ${playerName} created room ${roomId} (IP ${ip}, chips ${granted}/${sanitized.startingChips})`);
   });
 
   // Join room
@@ -908,9 +995,21 @@ io.on('connection', (socket) => {
     const room = getRoom(roomId);
     if (!room) return callback({ error: 'Room not found' });
 
+    // Pre-check phòng để không trừ hạn mức IP nếu join thất bại
+    if (room.players.length >= room.settings.maxPlayers) return callback({ error: 'Room is full' });
+    if (room.players.find(p => p.id === socket.id)) return callback({ error: 'Already joined' });
+
+    const ip = getClientIp(socket);
+    const { granted, totalUsed } = consumeChipsForIp(ip, room.settings.startingChips);
+    if (granted <= 0) {
+      writeLog('IP_LIMIT_BLOCK', { ip, action: 'joinRoom', roomId, requested: room.settings.startingChips, totalUsed });
+      return callback({ error: `Bạn đã nhận đủ ${DAILY_IP_CHIPS_LIMIT} chips hôm nay. Thử lại sau 00:00.` });
+    }
+
     const playerId = socket.id;
     const player = addPlayer(room, playerId, playerName, avatar);
     if (!player) return callback({ error: 'Room is full or already joined' });
+    player.chips = granted;
 
     const isPlaying = room.status === 'playing';
     const isWaitingNext = room.status === 'waiting_next';
@@ -931,8 +1030,8 @@ io.on('connection', (socket) => {
     }
 
     broadcastRoomList();
-    writeLog('ROOM_JOIN', { roomId, player: playerName, chips: room.settings.startingChips, spectator: isPlaying });
-    console.log(`[Room] ${playerName} joined room ${roomId}${isPlaying ? ' (spectator)' : ''}`);
+    writeLog('ROOM_JOIN', { roomId, player: playerName, ip, chips: granted, requested: room.settings.startingChips, spectator: isPlaying });
+    console.log(`[Room] ${playerName} joined room ${roomId} (IP ${ip}, chips ${granted})${isPlaying ? ' (spectator)' : ''}`);
   });
 
   // Toggle ready
