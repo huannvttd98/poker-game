@@ -580,10 +580,13 @@ function renderActions(game) {
 
   if (!me || me.folded || me.allIn || me.chips <= 0 || !me.isCurrent || game.stage === 'showdown' || game.stage === 'finished') {
     actionsEl.style.display = 'none';
+    closeRaisePanel();
     return;
   }
 
   actionsEl.style.display = 'flex';
+  // Đóng drawer mỗi turn mới — player chủ động mở lại nếu muốn raise
+  closeRaisePanel();
 
   const canCheck = me.bet >= game.currentBet;
   const callAmount = game.currentBet - me.bet;
@@ -592,11 +595,17 @@ function renderActions(game) {
   document.getElementById('btn-call').style.display = canCheck ? 'none' : 'inline-block';
   document.getElementById('call-amount').textContent = Math.min(callAmount, me.chips);
 
-  // Raise controls
-  const slider = document.getElementById('raise-slider');
-  const input = document.getElementById('raise-input');
+  // Disable Raise nếu không đủ chips để raise tối thiểu
   const minRaise = game.currentBet + game.minRaise;
   const maxRaise = me.chips + me.bet;
+  const canRaise = maxRaise >= minRaise;
+  const btnOpenRaise = document.getElementById('btn-open-raise');
+  btnOpenRaise.disabled = !canRaise;
+  btnOpenRaise.style.opacity = canRaise ? '' : '0.4';
+
+  // Pre-set raise controls (drawer dùng khi mở)
+  const slider = document.getElementById('raise-slider');
+  const input = document.getElementById('raise-input');
   slider.min = minRaise;
   slider.max = maxRaise;
   slider.value = minRaise;
@@ -607,6 +616,22 @@ function renderActions(game) {
   document.getElementById('raise-max-label').textContent = maxRaise;
   updateRaiseDisplay(minRaise);
   updatePotButtons(game.pot, minRaise, maxRaise);
+}
+
+function openRaisePanel() {
+  const drawer = document.getElementById('raise-drawer');
+  if (!drawer) return;
+  drawer.style.display = 'flex';
+  document.getElementById('btn-open-raise').classList.add('active');
+  // Focus vào input để tiện gõ số
+  setTimeout(() => document.getElementById('raise-input')?.focus(), 50);
+}
+
+function closeRaisePanel() {
+  const drawer = document.getElementById('raise-drawer');
+  if (!drawer) return;
+  drawer.style.display = 'none';
+  document.getElementById('btn-open-raise')?.classList.remove('active');
 }
 
 function updatePotButtons(pot, minRaise, maxRaise) {
@@ -672,6 +697,7 @@ function doAction(action) {
   if (action === 'raise') {
     amount = parseInt(document.getElementById('raise-input').value) || parseInt(document.getElementById('raise-slider').value);
   }
+  closeRaisePanel();
   socket.emit('action', { action, amount }, (res) => {
     if (res?.error) showModal(res.error);
   });
@@ -1259,14 +1285,6 @@ document.addEventListener('keydown', (e) => {
     sendChat();
   }
 });
-
-// ============================================
-// HELP
-// ============================================
-function toggleHelp() {
-  const el = document.getElementById('help-overlay');
-  if (el) el.style.display = el.style.display === 'none' ? 'flex' : 'none';
-}
 
 // Enter key support
 document.getElementById('player-name').addEventListener('keydown', (e) => {
