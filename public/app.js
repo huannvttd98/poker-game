@@ -116,6 +116,7 @@ function getRoomSettings() {
     maxPlayers: parseInt(document.getElementById('setting-max-players').value) || 9,
     turnTime: parseInt(document.getElementById('setting-turn-time').value) || 18,
     readyTime: parseInt(document.getElementById('setting-ready-time').value) || 12,
+    lockAfterStart: !!document.getElementById('setting-lock-late')?.checked,
   };
 }
 
@@ -251,7 +252,8 @@ socket.on('roomUpdate', (room) => {
       `<span class="stag">${t('chips')}: ${s.startingChips}</span>` +
       `<span class="stag">${t('maxPlayers')}: ${s.maxPlayers}</span>` +
       `<span class="stag">${t('turnTime')}: ${s.turnTime}s</span>` +
-      `<span class="stag">${t('readyTime')}: ${s.readyTime}s</span>`;
+      `<span class="stag">${t('readyTime')}: ${s.readyTime}s</span>` +
+      (s.lockAfterStart ? `<span class="stag">${t('lockAfterStartTag')}</span>` : '');
   }
   const sidebarLabel = document.getElementById('sidebar-room-label');
   if (sidebarLabel) sidebarLabel.textContent = room.name || room.id;
@@ -742,6 +744,8 @@ socket.on('handFinished', (result) => {
       ${(() => {
         const me = currentRoom?.players.find(p => p.id === myId);
         const noChips = me && me.chips <= 0;
+        const locked = !!me?.lateJoiner;
+        if (locked) return `<button id="btn-ready-next" class="btn-ready-next" disabled style="opacity:0.5">${t('lockedSpectator')}</button>`;
         if (noChips) return `<button id="btn-ready-next" class="btn-ready-next" disabled style="opacity:0.5">${t('eliminated')}</button>`;
         return `<button id="btn-ready-next" class="btn-ready-next" onclick="readyNextHand()">${isSpectator ? t('joinReady') : t('ready')}</button>`;
       })()}
@@ -885,10 +889,14 @@ function updateSpectatorBar() {
   if (!bar) return;
 
   if (isSpectator) {
+    const me = currentRoom?.players.find(p => p.id === myId);
+    const locked = !!me?.lateJoiner;
     bar.style.display = 'flex';
     bar.innerHTML = `
       <span class="spectator-label">${t('spectating')}</span>
-      <button class="btn-join-next" onclick="joinNextHand()">${t('joinNextHand')}</button>
+      ${locked
+        ? `<span class="spectator-locked">${t('lockedSpectator')}</span>`
+        : `<button class="btn-join-next" onclick="joinNextHand()">${t('joinNextHand')}</button>`}
     `;
   } else {
     bar.style.display = 'none';

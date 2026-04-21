@@ -16,6 +16,9 @@ const LANGS = {
     maxPlayers: 'So nguoi choi toi da',
     turnTime: 'Thoi gian moi luot (giay)',
     readyTime: 'TG san sang (giay)',
+    lockAfterStart: 'Nguoi vao sau chi xem',
+    lockAfterStartTag: 'Khoa vao sau',
+    lockedSpectator: 'Chi duoc xem',
 
     createRoom: 'Tao phong',
     roomCode: 'Ma phong',
@@ -120,6 +123,9 @@ const LANGS = {
     maxPlayers: 'Max players',
     turnTime: 'Turn time (seconds)',
     readyTime: 'Ready time (seconds)',
+    lockAfterStart: 'Late joiners spectate only',
+    lockAfterStartTag: 'Late-join lock',
+    lockedSpectator: 'Spectator only',
 
     createRoom: 'Create Room',
     roomCode: 'Room code',

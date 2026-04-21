@@ -145,7 +145,8 @@ function sanitizeSettings(s) {
   const maxPlayers = [2, 4, 6, 9].includes(parseInt(raw.maxPlayers)) ? parseInt(raw.maxPlayers) : 9;
   const turnTime = [10, 15, 18, 30, 60].includes(parseInt(raw.turnTime)) ? parseInt(raw.turnTime) : 18;
   const readyTime = [5, 8, 10, 12, 15, 20, 30].includes(parseInt(raw.readyTime)) ? parseInt(raw.readyTime) : 12;
-  return { startingChips, smallBlind, bigBlind, maxPlayers, turnTime, readyTime };
+  const lockAfterStart = !!raw.lockAfterStart;
+  return { startingChips, smallBlind, bigBlind, maxPlayers, turnTime, readyTime, lockAfterStart };
 }
 
 function createRoom(roomId, hostId, hostName, avatar, roomName, settings) {
@@ -674,7 +675,7 @@ function checkGameWinner(room) {
     // Reset room after showing winner
     setTimeout(() => {
       if (!rooms.has(room.id)) return;
-      room.players.forEach(p => { p.chips = room.settings.startingChips; p.ready = false; p.spectator = false; });
+      room.players.forEach(p => { p.chips = room.settings.startingChips; p.ready = false; p.spectator = false; p.lateJoiner = false; });
       io.to(room.id).emit('roomUpdate', getRoomState(room));
       io.to(room.id).emit('backToLobby');
       broadcastRoomList();
@@ -689,7 +690,7 @@ function prepareNextHand(room) {
   // Players with 0 chips become spectators and cannot ready up
   room.players.forEach(p => {
     p.ready = false;
-    p.spectator = p.chips <= 0;
+    p.spectator = p.chips <= 0 || !!p.lateJoiner;
   });
 
   room.status = 'waiting_next';
@@ -731,7 +732,7 @@ function autoStartWithReady(room) {
     // Not enough ready players - go back to lobby
     room.status = 'waiting';
     room.game = null;
-    room.players.forEach(p => { p.ready = false; p.spectator = false; });
+    room.players.forEach(p => { p.ready = false; p.spectator = false; p.lateJoiner = false; });
     io.to(room.id).emit('roomUpdate', getRoomState(room));
     io.to(room.id).emit('backToLobby');
     broadcastRoomList();
@@ -749,7 +750,7 @@ function autoStartWithReady(room) {
 function checkAllReadyAndStart(room) {
   if (room.status !== 'waiting_next') return;
 
-  const playablePlayers = room.players.filter(p => p.chips > 0);
+  const playablePlayers = room.players.filter(p => p.chips > 0 && !p.lateJoiner);
   const allReady = playablePlayers.length > 0 && playablePlayers.every(p => p.ready);
   if (!allReady) return;
 
@@ -759,7 +760,7 @@ function checkAllReadyAndStart(room) {
   if (playablePlayers.length < 2) {
     room.status = 'waiting';
     room.game = null;
-    room.players.forEach(p => p.ready = false);
+    room.players.forEach(p => { p.ready = false; p.spectator = false; p.lateJoiner = false; });
     io.to(room.id).emit('roomUpdate', getRoomState(room));
     io.to(room.id).emit('backToLobby');
     broadcastRoomList();
@@ -852,7 +853,8 @@ function getRoomState(room) {
       avatar: p.avatar,
       ready: p.ready,
       connected: p.connected,
-      spectator: p.spectator || false
+      spectator: p.spectator || false,
+      lateJoiner: p.lateJoiner || false
     }))
   };
 }
@@ -914,9 +916,15 @@ io.on('connection', (socket) => {
 
     const isPlaying = room.status === 'playing';
     const isWaitingNext = room.status === 'waiting_next';
+    const isInProgress = isPlaying || isWaitingNext;
+    const lockLate = !!room.settings.lockAfterStart;
 
     if (isPlaying) {
       player.spectator = true;
+    }
+    if (lockLate && isInProgress) {
+      player.spectator = true;
+      player.lateJoiner = true;
     }
 
     playerSockets.set(socket.id, { roomId, playerId });
@@ -944,6 +952,7 @@ io.on('connection', (socket) => {
     const player = room.players.find(p => p.id === info.playerId);
     if (player) {
       if (player.chips <= 0) return;
+      if (player.lateJoiner) return;
       player.ready = !player.ready;
       io.to(room.id).emit('roomUpdate', getRoomState(room));
 
@@ -962,7 +971,7 @@ io.on('connection', (socket) => {
     if (!room) return callback?.({ error: 'Room not found' });
     if (room.hostId !== info.playerId) return callback?.({ error: 'Only host can start' });
 
-    const playablePlayers = room.players.filter(p => p.chips > 0);
+    const playablePlayers = room.players.filter(p => p.chips > 0 && !p.lateJoiner);
     const allReady = playablePlayers.every(p => p.ready || p.id === room.hostId);
     if (!allReady) return callback?.({ error: 'Not all players are ready' });
     if (playablePlayers.length < 2) return callback?.({ error: 'Need at least 2 players' });

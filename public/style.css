@@ -1244,6 +1244,14 @@ button:active {
   font-weight: 700; cursor: pointer; transition: opacity 0.2s;
 }
 .btn-join-next:hover { opacity: 0.85; }
+.spectator-locked {
+  color: #ff9800; font-size: 0.75rem; font-weight: 600;
+  padding: 4px 10px; border-radius: 8px;
+  background: rgba(255,152,0,0.1); border: 1px dashed rgba(255,152,0,0.4);
+}
+.setting-toggle {
+  width: 20px; height: 20px; cursor: pointer; accent-color: var(--gold, #ffc66b);
+}
 
 /* ============================================
    POKER TABLE
