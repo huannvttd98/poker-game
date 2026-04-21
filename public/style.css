@@ -1178,6 +1178,10 @@ button:active {
 .log-winner-row2 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .log-winner-line .log-amount { color: var(--green); font-weight: 700; }
 .log-winner-line .log-hand { color: var(--gold); font-style: italic; font-size: 0.6rem; font-weight: 600; }
+.log-winner-line.log-refund { opacity: 0.75; }
+.log-winner-line.log-refund .log-name { color: var(--muted); }
+.log-winner-line.log-refund .log-amount { color: var(--muted); }
+.log-winner-line.log-refund .log-hand { color: var(--muted); }
 .log-best-cards { display: flex; gap: 2px; margin-top: 0; }
 .log-best-cards .card.card-mini {
   width: 22px; height: 30px; font-size: 0.5rem; padding: 1px;
@@ -1747,6 +1751,7 @@ button:active {
 .rhi-cards { display: flex; gap: 2px; flex-shrink: 0; }
 .rhi-cards .card { width: 26px; height: 36px; font-size: 0.5rem; }
 .rhi-amount { font-size: 0.8rem; font-weight: 800; color: var(--gold); flex-shrink: 0; white-space: nowrap; }
+.rhi-amount.rhi-amount-refund { color: var(--muted); font-weight: 600; font-size: 0.7rem; font-style: italic; }
 
 /* Result footer: countdown + ready */
 .result-bar-footer {

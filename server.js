@@ -111,6 +111,7 @@ function mergeWinners(winners) {
   for (const w of winners) {
     if (map[w.playerId]) {
       map[w.playerId].amount += w.amount;
+      if (!w.uncalled) map[w.playerId].uncalled = false;
     } else {
       map[w.playerId] = { ...w };
     }
@@ -614,13 +615,15 @@ function showdown(room) {
     for (const pot of game.sidePots) {
       const eligibleResults = handResults.filter(r => pot.eligible.includes(r.playerId));
       const winners = determineWinners(eligibleResults);
+      if (winners.length === 0) continue;
       const share = Math.floor(pot.amount / winners.length);
+      const uncalled = pot.eligible.length === 1;
       for (const w of winners) {
         const gp = game.players.find(p => p.id === w.playerId);
         const rp = room.players.find(p => p.id === w.playerId);
         if (gp) gp.chips += share;
         if (rp) rp.chips += share;
-        result.winners.push({ playerId: w.playerId, name: w.name, amount: share, hand: result.hands[w.playerId], bestCards: bestCardsMap[w.playerId] });
+        result.winners.push({ playerId: w.playerId, name: gp?.name || rp?.name || '', amount: share, hand: result.hands[w.playerId], bestCards: bestCardsMap[w.playerId], uncalled });
       }
     }
   } else {
@@ -632,7 +635,7 @@ function showdown(room) {
       const rp = room.players.find(p => p.id === w.playerId);
       if (gp) gp.chips += share;
       if (rp) rp.chips += share;
-      result.winners.push({ playerId: w.playerId, name: w.name, amount: share, hand: result.hands[w.playerId], bestCards: bestCardsMap[w.playerId] });
+      result.winners.push({ playerId: w.playerId, name: gp?.name || rp?.name || '', amount: share, hand: result.hands[w.playerId], bestCards: bestCardsMap[w.playerId] });
     }
   }
 

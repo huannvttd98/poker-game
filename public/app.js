@@ -713,22 +713,27 @@ socket.on('handFinished', (result) => {
     const handsHtml = currentGame?.players
       .filter(p => !p.folded && p.hand)
       .map(p => {
-        const isWinner = result.winners.some(w => w.playerId === p.id);
-        const winAmount = result.winners.filter(w => w.playerId === p.id).reduce((s, w) => s + w.amount, 0);
-        return { p, isWinner, winAmount };
+        const winEntries = result.winners.filter(w => w.playerId === p.id);
+        const winAmount = winEntries.reduce((s, w) => s + w.amount, 0);
+        const isWinner = winEntries.length > 0;
+        const onlyRefund = isWinner && winEntries.every(w => w.uncalled);
+        return { p, isWinner, winAmount, onlyRefund };
       })
       .sort((a, b) => b.winAmount - a.winAmount)
-      .map(({ p, isWinner, winAmount }) => {
+      .map(({ p, isWinner, winAmount, onlyRefund }) => {
         const handName = result.hands?.[p.id] || '';
+        const badge = onlyRefund ? ' ↩' : (isWinner ? ' 👑' : '');
+        const amountCls = onlyRefund ? 'rhi-amount rhi-amount-refund' : 'rhi-amount';
+        const amountLabel = onlyRefund ? ` (${t('refunded')})` : '';
         return `
-          <div class="result-hand-item ${isWinner ? 'is-winner' : 'is-loser'}">
+          <div class="result-hand-item ${isWinner && !onlyRefund ? 'is-winner' : 'is-loser'}">
             <span class="rhi-avatar">${p.avatar || '😎'}</span>
             <div class="rhi-info">
-              <span class="rhi-name">${esc(p.name)}${isWinner ? ' 👑' : ''}</span>
+              <span class="rhi-name">${esc(p.name)}${badge}</span>
               <span class="rhi-hand">${handName}</span>
             </div>
             <div class="rhi-cards">${p.hand.map(c => renderCard(c)).join('')}</div>
-            ${isWinner ? `<span class="rhi-amount">+${winAmount}</span>` : ''}
+            ${isWinner ? `<span class="${amountCls}">+${winAmount}${amountLabel}</span>` : ''}
           </div>`;
       }).join('') || '';
 
@@ -1091,9 +1096,12 @@ function renderLog(log) {
           ? '<div class="log-best-cards">' + w.bestCards.map(c => renderCard(c, ' card-mini')).join('') + '</div>'
           : '';
         const handStr = w.hand ? '<span class="log-hand">' + w.hand + '</span>' : '';
-        return '<div class="log-winner-line">'
-          + '<div class="log-winner-row1">\u{1F451} <span class="log-name">' + esc(w.name) + '</span> ' + handStr + '</div>'
-          + '<div class="log-winner-row2"><span class="log-win-text">' + t('wins') + ' <span class="log-amount">+' + w.amount + '</span></span>' + cardsHtml + '</div>'
+        const icon = w.uncalled ? '↩' : '\u{1F451}';
+        const winText = w.uncalled ? t('refunded') : t('wins');
+        const rowClass = w.uncalled ? 'log-winner-line log-refund' : 'log-winner-line';
+        return '<div class="' + rowClass + '">'
+          + '<div class="log-winner-row1">' + icon + ' <span class="log-name">' + esc(w.name) + '</span> ' + handStr + '</div>'
+          + '<div class="log-winner-row2"><span class="log-win-text">' + winText + ' <span class="log-amount">+' + w.amount + '</span></span>' + cardsHtml + '</div>'
           + '</div>';
       }).join('');
       return '<div class="log-entry log-result">' + lines + '</div>';

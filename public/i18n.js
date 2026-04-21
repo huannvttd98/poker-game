@@ -57,6 +57,7 @@ const LANGS = {
     winner: 'Nguoi thang!',
     showdown: 'Showdown!',
     wins: 'thang',
+    refunded: 'hoan lai',
     othersFolded: 'Doi thu bo bai',
     communityCards: 'Bai chung',
     // Ready countdown
@@ -159,6 +160,7 @@ const LANGS = {
     winner: 'Winner!',
     showdown: 'Showdown!',
     wins: 'wins',
+    refunded: 'refunded',
     othersFolded: 'Others folded',
     communityCards: 'Community Cards',
     autoStartIn: 'Auto start in {s}s',
