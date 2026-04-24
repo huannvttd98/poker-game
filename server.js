@@ -101,6 +101,35 @@ function determineWinners(handResults) {
   return handResults.filter(r => winning.includes(r.hand));
 }
 
+// Split a pot among winners using standard poker odd-chip rule:
+// the remainder goes to winners in seat order starting from the first seat
+// left of the dealer button (earliest position).
+function splitPot(amount, winners, game) {
+  if (winners.length === 0) return [];
+  const n = winners.length;
+  const base = Math.floor(amount / n);
+  let remainder = amount - base * n;
+
+  const dealerIdx = game.dealerIndex;
+  const numPlayers = game.players.length;
+  const ordered = winners
+    .map(w => {
+      const seatIdx = game.players.findIndex(p => p.id === w.playerId);
+      const dist = (seatIdx - dealerIdx - 1 + numPlayers) % numPlayers;
+      return { winner: w, dist };
+    })
+    .sort((a, b) => a.dist - b.dist);
+
+  return ordered.map(({ winner }) => {
+    let share = base;
+    if (remainder > 0) {
+      share += 1;
+      remainder -= 1;
+    }
+    return { winner, share };
+  });
+}
+
 // ============================================
 // ACTION LOG UTILS
 // ============================================
@@ -616,9 +645,9 @@ function showdown(room) {
       const eligibleResults = handResults.filter(r => pot.eligible.includes(r.playerId));
       const winners = determineWinners(eligibleResults);
       if (winners.length === 0) continue;
-      const share = Math.floor(pot.amount / winners.length);
       const uncalled = pot.eligible.length === 1;
-      for (const w of winners) {
+      const shares = splitPot(pot.amount, winners, game);
+      for (const { winner: w, share } of shares) {
         const gp = game.players.find(p => p.id === w.playerId);
         const rp = room.players.find(p => p.id === w.playerId);
         if (gp) gp.chips += share;
@@ -629,8 +658,8 @@ function showdown(room) {
   } else {
     // Simple pot distribution
     const winners = determineWinners(handResults);
-    const share = Math.floor(game.pot / winners.length);
-    for (const w of winners) {
+    const shares = splitPot(game.pot, winners, game);
+    for (const { winner: w, share } of shares) {
       const gp = game.players.find(p => p.id === w.playerId);
       const rp = room.players.find(p => p.id === w.playerId);
       if (gp) gp.chips += share;
