@@ -9,17 +9,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Poker LAN</title>
-    <link rel="stylesheet" href="style.css?v=3.3" />
+    <link rel="stylesheet" href="style.css?v=3.6" />
   </head>
   <body>
-    <!-- LANG SWITCHER -->
-    <div class="lang-switcher">
-      <select id="lang-select" class="lang-select" onchange="setLang(this.value)">
-        <option value="vi">🇻🇳 Tiếng Việt</option>
-        <option value="en">🇬🇧 English</option>
-      </select>
-    </div>
-
     <!-- HELP OVERLAY -->
     <div id="help-overlay" class="help-overlay" style="display: none">
       <div class="help-content">
@@ -324,6 +316,13 @@
         <button id="btn-start" onclick="startGame()" style="display: none" data-i18n="startGame">
           Bat dau
         </button>
+        <button class="btn-voice" onclick="toggleVoice()" title="Voice chat">
+          <span class="voice-btn-icon">🎤</span>
+          <span class="voice-btn-text" data-i18n="voiceJoin">Voice</span>
+        </button>
+        <button class="btn-voice-mute" onclick="toggleVoiceMute()" style="display:none" title="Mute">
+          <span class="voice-btn-icon">🎙️</span>
+        </button>
       </div>
     </div>
 
@@ -457,6 +456,16 @@
       <!-- MAIN GAME AREA -->
       <div class="game-main">
         <div id="spectator-bar" class="spectator-bar" style="display:none"></div>
+        <!-- Voice control bar (floating top-left) -->
+        <div class="voice-bar">
+          <button class="btn-voice" onclick="toggleVoice()" title="Voice chat">
+            <span class="voice-btn-icon">🎤</span>
+            <span class="voice-btn-text" data-i18n="voiceJoin">Voice</span>
+          </button>
+          <button class="btn-voice-mute" onclick="toggleVoiceMute()" style="display:none" title="Mute">
+            <span class="voice-btn-icon">🎙️</span>
+          </button>
+        </div>
         <!-- Mobile sidebar toggle -->
         <button class="btn-toggle-sidebar" onclick="toggleSidebar()">&#9776;</button>
         <div class="poker-table">
@@ -538,8 +547,8 @@
       </div>
     </div>
 
-    <script src="/socket.io/socket.io.js?v=3.3"></script>
-    <script src="i18n.js?v=3.3"></script>
-    <script src="app.js?v=3.3"></script>
+    <script src="/socket.io/socket.io.js?v=3.6"></script>
+    <script src="i18n.js?v=3.6"></script>
+    <script src="app.js?v=3.6"></script>
   </body>
 </html>

@@ -114,7 +114,9 @@ function createRoom(roomId, hostId, hostName, chips, avatar, roomName) {
       connected: true
     }],
     game: null,
-    status: 'waiting' // waiting | playing
+    status: 'waiting', // waiting | playing
+    voicePeers: new Set(),
+    voiceMutes: new Map()
   };
   rooms.set(roomId, room);
   return room;
@@ -419,7 +421,15 @@ function advanceStage(room) {
   const currentIdx = stages.indexOf(game.stage);
 
   if (currentIdx >= 3) {
-    // After river -> showdown
+    // After river -> showdown.
+    // If anyone still in the hand is all-in, do a dramatic reveal pause first.
+    const anyAllIn = game.players.some(p => !p.folded && p.allIn);
+    if (anyAllIn) {
+      clearTurnTimer(room);
+      game.allInReveal = true;
+      game.turnDeadline = null;
+      return startAllInShowdown(room);
+    }
     return showdown(room);
   }
 
@@ -441,16 +451,12 @@ function advanceStage(room) {
       break;
   }
 
-  // If all players are all-in or folded, skip to showdown
+  // No further action possible -> reveal hole cards and slow-roll remaining streets
   if (countPlayersCanAct(game) <= 1) {
-    // Deal remaining community cards
-    while (game.communityCards.length < 5) {
-      game.deck.pop(); // burn
-      game.communityCards.push(game.deck.pop());
-    }
-    game.stage = 'showdown';
     clearTurnTimer(room);
-    return showdown(room);
+    game.allInReveal = true;
+    game.turnDeadline = null;
+    return startAllInSlowRoll(room);
   }
 
   // First to act after flop is first active player after dealer
@@ -466,6 +472,63 @@ function advanceStage(room) {
 
   startTurnTimer(room);
   return { success: true, stage: game.stage };
+}
+
+// ============================================
+// ALL-IN DRAMATIC REVEAL
+// ============================================
+const ALLIN_STREET_DELAY = 2200; // ms between dealing each remaining street
+const ALLIN_REVEAL_DELAY = 1800; // ms between hands fully shown and showdown result
+
+function startAllInSlowRoll(room) {
+  const game = room.game;
+  // Broadcast immediately so clients see hands revealed + the just-dealt street
+  broadcastGameState(room);
+  scheduleNextAllInStreet(room, game);
+  return { success: true, allInRunning: true };
+}
+
+function startAllInShowdown(room) {
+  const game = room.game;
+  // No streets left to deal — just pause briefly with hands visible, then showdown
+  broadcastGameState(room);
+  setTimeout(() => {
+    if (!rooms.has(room.id) || room.game !== game) return;
+    finalizeAllInShowdown(room, game);
+  }, ALLIN_REVEAL_DELAY);
+  return { success: true, allInRunning: true };
+}
+
+function scheduleNextAllInStreet(room, game) {
+  setTimeout(() => {
+    if (!rooms.has(room.id) || room.game !== game) return;
+
+    if (game.communityCards.length >= 5) {
+      finalizeAllInShowdown(room, game);
+      return;
+    }
+
+    // Burn + deal next street
+    game.deck.pop();
+    if (game.communityCards.length === 3) {
+      game.stage = 'turn';
+      game.communityCards.push(game.deck.pop());
+    } else if (game.communityCards.length === 4) {
+      game.stage = 'river';
+      game.communityCards.push(game.deck.pop());
+    }
+    game.actionLog.push({ action: 'stage', stage: game.stage });
+    broadcastGameState(room);
+
+    scheduleNextAllInStreet(room, game);
+  }, ALLIN_STREET_DELAY);
+}
+
+function finalizeAllInShowdown(room, game) {
+  const res = showdown(room);
+  broadcastGameState(room);
+  io.to(room.id).emit('roomUpdate', getRoomState(room));
+  io.to(room.id).emit('handFinished', res.result);
 }
 
 function calculateSidePots(game) {
@@ -729,6 +792,7 @@ function getGameStateForPlayer(room, playerId) {
   const game = room.game;
   if (!game) return null;
 
+  const reveal = !!game.allInReveal || game.stage === 'showdown' || game.stage === 'finished';
   return {
     stage: game.stage,
     communityCards: game.communityCards,
@@ -744,6 +808,7 @@ function getGameStateForPlayer(room, playerId) {
     turnDeadline: game.turnDeadline || null,
     actionLog: game.actionLog || [],
     result: game.result || null,
+    allInReveal: !!game.allInReveal,
     players: game.players.map((p, i) => ({
       id: p.id,
       name: p.name,
@@ -752,7 +817,7 @@ function getGameStateForPlayer(room, playerId) {
       bet: p.bet,
       folded: p.folded,
       allIn: p.allIn,
-      hand: (p.id === playerId || game.stage === 'showdown' || game.stage === 'finished')
+      hand: (p.id === playerId || (reveal && !p.folded))
         ? p.hand
         : null,
       isDealer: i === game.dealerIndex,
@@ -790,7 +855,9 @@ function getRoomState(room) {
       avatar: p.avatar,
       ready: p.ready,
       connected: p.connected,
-      spectator: p.spectator || false
+      spectator: p.spectator || false,
+      voiceOn: room.voicePeers ? room.voicePeers.has(p.id) : false,
+      voiceMuted: room.voiceMutes ? !!room.voiceMutes.get(p.id) : false
     }))
   };
 }
@@ -947,6 +1014,12 @@ io.on('connection', (socket) => {
     // Notify the kicked player
     io.to(targetId).emit('kicked');
 
+    // Clean up voice peer if active
+    if (room.voicePeers && room.voicePeers.delete(targetId)) {
+      if (room.voiceMutes) room.voiceMutes.delete(targetId);
+      io.to(room.id).emit('voicePeerLeft', { peerId: targetId });
+    }
+
     // Remove from room
     const targetSock = io.sockets.sockets.get(targetId);
     if (targetSock) targetSock.leave(room.id);
@@ -985,6 +1058,58 @@ io.on('connection', (socket) => {
     callback?.({ success: true });
   });
 
+  // ============================================
+  // VOICE CHAT (WebRTC signaling)
+  // ============================================
+  socket.on('voiceJoin', (_, callback) => {
+    const info = playerSockets.get(socket.id);
+    if (!info) return callback?.({ error: 'Not in a room' });
+    const room = getRoom(info.roomId);
+    if (!room) return callback?.({ error: 'Room not found' });
+
+    if (!room.voicePeers) room.voicePeers = new Set();
+    if (!room.voiceMutes) room.voiceMutes = new Map();
+
+    room.voicePeers.add(info.playerId);
+    room.voiceMutes.set(info.playerId, false);
+
+    const peers = [...room.voicePeers].filter(id => id !== info.playerId);
+    callback?.({ success: true, peers });
+
+    socket.to(room.id).emit('voicePeerJoined', { peerId: info.playerId });
+    io.to(room.id).emit('roomUpdate', getRoomState(room));
+  });
+
+  socket.on('voiceLeave', () => {
+    const info = playerSockets.get(socket.id);
+    if (!info) return;
+    const room = getRoom(info.roomId);
+    if (!room) return;
+    if (room.voicePeers && room.voicePeers.delete(info.playerId)) {
+      if (room.voiceMutes) room.voiceMutes.delete(info.playerId);
+      socket.to(room.id).emit('voicePeerLeft', { peerId: info.playerId });
+      io.to(room.id).emit('roomUpdate', getRoomState(room));
+    }
+  });
+
+  socket.on('voiceSignal', ({ targetId, signal }) => {
+    const info = playerSockets.get(socket.id);
+    if (!info || !targetId || !signal) return;
+    const room = getRoom(info.roomId);
+    if (!room || !room.voicePeers || !room.voicePeers.has(targetId)) return;
+    io.to(targetId).emit('voiceSignal', { fromId: info.playerId, signal });
+  });
+
+  socket.on('voiceMute', ({ muted }) => {
+    const info = playerSockets.get(socket.id);
+    if (!info) return;
+    const room = getRoom(info.roomId);
+    if (!room || !room.voicePeers || !room.voicePeers.has(info.playerId)) return;
+    if (!room.voiceMutes) room.voiceMutes = new Map();
+    room.voiceMutes.set(info.playerId, !!muted);
+    io.to(room.id).emit('roomUpdate', getRoomState(room));
+  });
+
   // Leave room
   socket.on('leaveRoom', () => {
     handleDisconnect(socket);
@@ -1003,6 +1128,12 @@ function handleDisconnect(socket) {
 
   const room = getRoom(info.roomId);
   if (!room) return;
+
+  // Clean up voice peer if active
+  if (room.voicePeers && room.voicePeers.delete(info.playerId)) {
+    if (room.voiceMutes) room.voiceMutes.delete(info.playerId);
+    socket.to(room.id).emit('voicePeerLeft', { peerId: info.playerId });
+  }
 
   if (room.status === 'playing' && room.game) {
     // Auto fold in current game
