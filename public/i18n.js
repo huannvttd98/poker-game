@@ -94,6 +94,14 @@ const LANGS = {
     rank8d: 'Hai doi',
     rank9d: 'Mot doi',
     rank10d: 'La cao nhat',
+    // Voice chat
+    voiceJoin: 'Voice',
+    voiceLeave: 'Tat voice',
+    voiceMute: 'Tat mic',
+    voiceUnmute: 'Bat mic',
+    voiceUnsupported: 'Trinh duyet khong ho tro voice chat.',
+    voiceMicError: 'Khong truy cap duoc microphone. Hay cap quyen va dam bao trang chay tren HTTPS hoac localhost.',
+    voiceNotInRoom: 'Ban can vao phong truoc khi bat voice chat.',
     // Misc
     chips: 'chips',
     host: 'Host',
@@ -177,13 +185,20 @@ const LANGS = {
     rank8d: 'Two pairs',
     rank9d: 'One pair',
     rank10d: 'Highest card',
+    voiceJoin: 'Voice',
+    voiceLeave: 'Leave voice',
+    voiceMute: 'Mute mic',
+    voiceUnmute: 'Unmute mic',
+    voiceUnsupported: 'Your browser does not support voice chat.',
+    voiceMicError: 'Cannot access microphone. Grant permission and ensure the page runs over HTTPS or localhost.',
+    voiceNotInRoom: 'You must be in a room to start voice chat.',
     chips: 'chips',
     host: 'Host',
     playing: 'playing',
   }
 };
 
-let currentLang = localStorage.getItem('pokerLang') || 'vi';
+let currentLang = 'vi';
 
 function t(key, params) {
   let str = LANGS[currentLang]?.[key] || LANGS['vi']?.[key] || key;

@@ -112,6 +112,7 @@ function joinRoom() {
 async function exitGame() {
   const ok = await showModal(t('exitConfirm'), { confirm: true });
   if (!ok) return;
+  stopVoice();
   socket.emit('leaveRoom');
   myId = null;
   myRoomId = null;
@@ -125,6 +126,7 @@ async function exitGame() {
 }
 
 function leaveRoom() {
+  stopVoice();
   socket.emit('leaveRoom');
   myId = null;
   myRoomId = null;
@@ -217,10 +219,15 @@ socket.on('roomUpdate', (room) => {
     const classes = ['player-card'];
     if (p.ready) classes.push('ready');
     if (isHost) classes.push('host');
+    if (p.voiceOn && !p.voiceMuted) classes.push('voice-on');
     const kickBtn = (iAmHost && !isHost) ? `<button class="btn-kick" onclick="kickPlayer('${p.id}')">${t('kick')}</button>` : '';
+    const micIcon = p.voiceOn
+      ? `<div class="player-mic-badge ${p.voiceMuted ? 'muted' : ''}">${p.voiceMuted ? '🔇' : '🎙️'}</div>`
+      : '';
     return `
-      <div class="${classes.join(' ')}">
+      <div class="${classes.join(' ')}" data-pid="${esc(p.id)}">
         <div class="player-avatar-small">${p.avatar || '😎'}</div>
+        ${micIcon}
         <div class="player-name">${esc(p.name)}</div>
         <div class="player-chips">${p.chips} ${t('chips')}</div>
         ${p.ready ? `<div class="player-status">${t('ready')}</div>` : ''}
@@ -257,6 +264,11 @@ socket.on('roomUpdate', (room) => {
 
   updateSpectatorBar();
   renderRankList();
+
+  // Re-render game seats so mic icons update
+  if (currentGame && document.getElementById('game-screen').classList.contains('active')) {
+    renderGame(currentGame);
+  }
 });
 
 // ============================================
@@ -298,7 +310,32 @@ function getSeatPositions() {
   ];
 }
 
+let prevCommunityKey = '';
+let prevHandRevealed = {}; // playerId -> bool (had visible hand last render)
+let recentReveals = new Set(); // playerIds whose hand just became visible this render
+
 function renderGame(game) {
+  // Detect new hand (community shrank back / preflop with no community)
+  const ccKey = game.communityCards.map(c => c.rank + c.suit).join(',');
+  const prevCount = prevCommunityKey ? prevCommunityKey.split(',').length : 0;
+  const isNewHand = (game.communityCards.length === 0 && prevCount > 0)
+    || (game.communityCards.length < prevCount);
+  if (isNewHand) {
+    prevHandRevealed = {};
+    prevCommunityKey = '';
+  }
+
+  // Detect newly revealed hole cards (for animating seat flip)
+  recentReveals = new Set();
+  for (const p of game.players) {
+    const hadHand = !!prevHandRevealed[p.id];
+    const hasHand = !!p.hand && !p.folded;
+    if (hasHand && !hadHand && p.id !== myId) {
+      recentReveals.add(p.id);
+    }
+    prevHandRevealed[p.id] = hasHand;
+  }
+
   // Reorder players so current player is at seat 0
   const myIndex = game.players.findIndex(p => p.id === myId);
   const ordered = [];
@@ -314,23 +351,34 @@ function renderGame(game) {
   // Seats
   const seatPositions = getSeatPositions();
   const seatsEl = document.getElementById('seats');
+  const roomPlayersById = {};
+  if (currentRoom) {
+    for (const rp of currentRoom.players) roomPlayersById[rp.id] = rp;
+  }
   seatsEl.innerHTML = ordered.map((p, i) => {
     const pos = seatPositions[i];
     const classes = ['seat'];
     if (p.isCurrent) classes.push('current');
     if (p.folded) classes.push('folded');
+    const rp = roomPlayersById[p.id];
+    if (rp && rp.voiceOn && !rp.voiceMuted) classes.push('voice-on');
 
     let badge = '';
     if (p.isDealer) badge = '<span class="seat-badge dealer">D</span>';
     else if (p.isSB) badge = '<span class="seat-badge sb">SB</span>';
     else if (p.isBB) badge = '<span class="seat-badge bb">BB</span>';
 
-    const cardsHtml = renderPlayerCards(p, game.stage);
+    const micIcon = (rp && rp.voiceOn)
+      ? `<span class="seat-mic ${rp.voiceMuted ? 'muted' : ''}">${rp.voiceMuted ? '🔇' : '🎙️'}</span>`
+      : '';
+
+    const cardsHtml = renderPlayerCards(p, { animate: recentReveals.has(p.id) });
 
     return `
-      <div class="${classes.join(' ')}" style="top:${pos.top}%;left:${pos.left}%">
+      <div class="${classes.join(' ')}" data-pid="${esc(p.id)}" style="top:${pos.top}%;left:${pos.left}%">
         <div class="seat-info">
           ${badge}
+          ${micIcon}
           <div class="seat-avatar">${p.avatar || '😎'}</div>
           <div class="seat-name">${esc(p.name)}</div>
           <div class="seat-chips">${p.chips}</div>
@@ -342,9 +390,9 @@ function renderGame(game) {
     `;
   }).join('');
 
-  // Community cards
-  const ccEl = document.getElementById('community-cards');
-  ccEl.innerHTML = game.communityCards.map(c => renderCard(c)).join('');
+  // Community cards — append only newly dealt cards so they animate in
+  renderCommunityCards(game.communityCards, ccKey);
+  prevCommunityKey = ccKey;
 
   // Pot
   document.getElementById('pot-display').textContent = `${t('pot')}: ${game.pot}`;
@@ -360,21 +408,52 @@ function renderGame(game) {
   renderLog(game.actionLog);
 }
 
-function renderPlayerCards(player) {
+function renderCommunityCards(cards, ccKey) {
+  const ccEl = document.getElementById('community-cards');
+  if (!ccEl) return;
+
+  const sameAsPrev = ccKey === prevCommunityKey;
+  if (sameAsPrev) return;
+
+  const prevCount = prevCommunityKey ? prevCommunityKey.split(',').length : 0;
+  const goingBack = cards.length < prevCount;
+
+  if (cards.length === 0 || goingBack) {
+    ccEl.innerHTML = '';
+  }
+
+  // Append only the cards beyond what's already rendered
+  const startIdx = ccEl.children.length;
+  for (let i = startIdx; i < cards.length; i++) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = renderCard(cards[i], {
+      extraClass: 'card-flip-in',
+      delayMs: (i - startIdx) * 220
+    });
+    const cardEl = tmp.firstChild;
+    if (cardEl) ccEl.appendChild(cardEl);
+  }
+}
+
+function renderPlayerCards(player, opts = {}) {
   if (!player.hand) {
-    // Hidden cards
     if (!player.folded) {
       return '<div class="card face-down"></div><div class="card face-down"></div>';
     }
     return '';
   }
-  return player.hand.map(c => renderCard(c)).join('');
+  const animate = opts.animate;
+  return player.hand.map((c, i) =>
+    renderCard(c, { extraClass: animate ? 'card-flip-in' : '', delayMs: animate ? i * 120 : 0 })
+  ).join('');
 }
 
-function renderCard(card) {
+function renderCard(card, opts = {}) {
   const suitSymbols = { hearts: '\u2665', diamonds: '\u2666', clubs: '\u2663', spades: '\u2660' };
-  const suitClass = card.suit;
-  return `<div class="card face-up ${suitClass}">${card.rank}${suitSymbols[card.suit]}</div>`;
+  const cls = ['card', 'face-up', card.suit];
+  if (opts.extraClass) cls.push(opts.extraClass);
+  const styleAttr = opts.delayMs ? ` style="animation-delay:${opts.delayMs}ms"` : '';
+  return `<div class="${cls.join(' ')}"${styleAttr}>${card.rank}${suitSymbols[card.suit]}</div>`;
 }
 
 function renderActions(game) {
@@ -513,24 +592,38 @@ socket.on('handFinished', (result) => {
         </div>`
       : '';
 
-    // All players' hands (not folded)
-    const playersHtml = currentGame?.players
+    // Sort: winners first
+    const winnerIds = new Set(result.winners.map(w => w.playerId));
+    const playersInResult = (currentGame?.players || [])
       .filter(p => !p.folded && p.hand)
-      .map(p => {
-        const isWinner = result.winners.some(w => w.playerId === p.id);
-        const handName = result.hands?.[p.id] || '';
-        const winAmount = result.winners.filter(w => w.playerId === p.id).reduce((s, w) => s + w.amount, 0);
-        return `
-          <div class="result-player-hand ${isWinner ? 'is-winner' : 'is-loser'}">
-            <div class="result-player-info">
-              <span class="result-avatar-sm">${p.avatar || '😎'}</span>
-              <span class="result-name-sm">${esc(p.name)}</span>
-              ${isWinner ? `<span class="result-win-amount">+${winAmount}</span>` : ''}
-            </div>
-            <div class="result-cards">${p.hand.map(c => renderCard(c)).join('')}</div>
-            <div class="result-hand-name">${handName}</div>
-          </div>`;
-      }).join('') || '';
+      .sort((a, b) => {
+        const aw = winnerIds.has(a.id) ? 0 : 1;
+        const bw = winnerIds.has(b.id) ? 0 : 1;
+        return aw - bw;
+      });
+
+    const playersHtml = playersInResult.map(p => {
+      const isWinner = winnerIds.has(p.id);
+      const handName = result.hands?.[p.id] || '';
+      const winAmount = result.winners
+        .filter(w => w.playerId === p.id)
+        .reduce((s, w) => s + w.amount, 0);
+      const trophy = isWinner ? '<span class="result-trophy">🏆</span>' : '';
+      const winTag = isWinner
+        ? `<span class="result-win-amount">+${winAmount} ${t('chips')}</span>`
+        : '';
+      return `
+        <div class="result-player-hand ${isWinner ? 'is-winner' : 'is-loser'}">
+          <div class="result-player-header">
+            ${trophy}
+            <span class="result-avatar-sm">${p.avatar || '😎'}</span>
+            <span class="result-name-sm">${esc(p.name)}</span>
+            ${winTag}
+          </div>
+          <div class="result-cards result-cards-big">${p.hand.map(c => renderCard(c)).join('')}</div>
+          <div class="result-hand-name">${handName}</div>
+        </div>`;
+    }).join('');
 
     detailsEl.innerHTML = ccHtml + '<div class="result-players-list">' + playersHtml + '</div>';
   }
@@ -597,6 +690,7 @@ async function kickPlayer(targetId) {
 }
 
 socket.on('kicked', () => {
+  stopVoice();
   myId = null;
   myRoomId = null;
   currentRoom = null;
@@ -1028,4 +1122,342 @@ document.getElementById('player-name').addEventListener('keydown', (e) => {
 
 document.getElementById('room-code').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') joinRoom();
+});
+
+// ============================================
+// VOICE CHAT (WebRTC peer-to-peer)
+// ============================================
+const VOICE_ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+const SPEAK_THRESHOLD = 0.04;
+
+const voicePeers = {}; // peerId -> { pc, audio, stream, analyser, dataArray, speaking }
+let voiceLocalStream = null;
+let voiceEnabled = false;
+let voiceMuted = false;
+let voiceAudioCtx = null;
+let voiceLocalAnalyser = null; // { analyser, dataArray, speaking }
+let voiceRafId = null;
+
+async function toggleVoice() {
+  if (voiceEnabled) {
+    stopVoice();
+  } else {
+    await startVoice();
+  }
+}
+
+async function startVoice() {
+  if (voiceEnabled) return;
+  if (!myRoomId) {
+    showModal(t('voiceNotInRoom'));
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showModal(t('voiceUnsupported'));
+    return;
+  }
+  try {
+    voiceLocalStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false
+    });
+  } catch (err) {
+    console.error('getUserMedia failed', err);
+    showModal(t('voiceMicError') + (err && err.name ? ' (' + err.name + ')' : ''));
+    return;
+  }
+
+  voiceEnabled = true;
+  voiceMuted = false;
+  applyMicMute();
+
+  socket.emit('voiceJoin', null, async (res) => {
+    if (!res || res.error) {
+      showModal(res?.error || 'Voice error');
+      stopVoice();
+      return;
+    }
+    // We are the new joiner — initiate offers to all existing peers.
+    for (const peerId of (res.peers || [])) {
+      try { await callPeer(peerId, true); } catch (err) { console.error(err); }
+    }
+  });
+
+  startSpeakingDetection();
+  updateVoiceButton();
+}
+
+function stopVoice() {
+  if (!voiceEnabled && !voiceLocalStream && Object.keys(voicePeers).length === 0) {
+    updateVoiceButton();
+    return;
+  }
+  voiceEnabled = false;
+  voiceMuted = false;
+
+  if (voiceLocalStream) {
+    voiceLocalStream.getTracks().forEach(tr => { try { tr.stop(); } catch {} });
+    voiceLocalStream = null;
+  }
+
+  for (const peerId of Object.keys(voicePeers)) {
+    closePeer(peerId);
+  }
+
+  if (myRoomId) socket.emit('voiceLeave');
+
+  stopSpeakingDetection();
+  applySeatSpeaking(myId, false);
+  updateVoiceButton();
+}
+
+function toggleVoiceMute() {
+  if (!voiceEnabled) return;
+  voiceMuted = !voiceMuted;
+  applyMicMute();
+  socket.emit('voiceMute', { muted: voiceMuted });
+  if (voiceMuted) applySeatSpeaking(myId, false);
+  updateVoiceButton();
+}
+
+function applyMicMute() {
+  if (!voiceLocalStream) return;
+  for (const tr of voiceLocalStream.getAudioTracks()) {
+    tr.enabled = !voiceMuted;
+  }
+}
+
+async function callPeer(peerId, initiator) {
+  if (voicePeers[peerId]) return voicePeers[peerId];
+
+  const pc = new RTCPeerConnection({ iceServers: VOICE_ICE_SERVERS });
+  const audio = document.createElement('audio');
+  audio.autoplay = true;
+  audio.playsInline = true;
+  audio.dataset.voicePeer = peerId;
+  document.body.appendChild(audio);
+
+  const peer = { pc, audio, stream: null, analyser: null, dataArray: null, speaking: false };
+  voicePeers[peerId] = peer;
+
+  if (voiceLocalStream) {
+    for (const track of voiceLocalStream.getTracks()) {
+      pc.addTrack(track, voiceLocalStream);
+    }
+  }
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate) {
+      socket.emit('voiceSignal', {
+        targetId: peerId,
+        signal: { type: 'ice', candidate: e.candidate }
+      });
+    }
+  };
+
+  pc.ontrack = (e) => {
+    const stream = e.streams[0];
+    peer.stream = stream;
+    audio.srcObject = stream;
+    audio.play().catch(() => {});
+    setupRemoteAnalyser(peer, stream);
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      // peer dropped — keep entry until server tells us they left, but stop analyser
+      applySeatSpeaking(peerId, false);
+    }
+  };
+
+  if (initiator) {
+    try {
+      const offer = await pc.createOffer({ offerToReceiveAudio: true });
+      await pc.setLocalDescription(offer);
+      socket.emit('voiceSignal', {
+        targetId: peerId,
+        signal: { type: 'offer', sdp: pc.localDescription }
+      });
+    } catch (err) {
+      console.error('createOffer failed', err);
+    }
+  }
+
+  return peer;
+}
+
+function closePeer(peerId) {
+  const peer = voicePeers[peerId];
+  if (!peer) return;
+  try { peer.pc.close(); } catch {}
+  if (peer.audio) {
+    try { peer.audio.srcObject = null; } catch {}
+    if (peer.audio.parentNode) peer.audio.parentNode.removeChild(peer.audio);
+  }
+  delete voicePeers[peerId];
+  applySeatSpeaking(peerId, false);
+}
+
+socket.on('voicePeerJoined', () => {
+  // The newcomer will initiate the offer to us — nothing to do here.
+});
+
+socket.on('voicePeerLeft', ({ peerId }) => {
+  closePeer(peerId);
+});
+
+socket.on('voiceSignal', async ({ fromId, signal }) => {
+  if (!signal) return;
+
+  // If we're not in voice ourselves, we cannot host a peer connection — drop.
+  if (!voiceEnabled) return;
+
+  let peer = voicePeers[fromId];
+  if (!peer) {
+    // Incoming offer from a peer we haven't connected to yet.
+    if (signal.type === 'offer') {
+      peer = await callPeer(fromId, false);
+    } else {
+      return;
+    }
+  }
+
+  const pc = peer.pc;
+  try {
+    if (signal.type === 'offer') {
+      await pc.setRemoteDescription(signal.sdp);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('voiceSignal', {
+        targetId: fromId,
+        signal: { type: 'answer', sdp: pc.localDescription }
+      });
+    } else if (signal.type === 'answer') {
+      await pc.setRemoteDescription(signal.sdp);
+    } else if (signal.type === 'ice') {
+      try { await pc.addIceCandidate(signal.candidate); } catch (err) {
+        console.warn('addIceCandidate failed', err);
+      }
+    }
+  } catch (err) {
+    console.error('voiceSignal error', err);
+  }
+});
+
+// ----- Speaking detection -----
+function ensureAudioCtx() {
+  if (!voiceAudioCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    voiceAudioCtx = new Ctx();
+  }
+  if (voiceAudioCtx.state === 'suspended') voiceAudioCtx.resume().catch(() => {});
+  return voiceAudioCtx;
+}
+
+function setupRemoteAnalyser(peer, stream) {
+  const ctx = ensureAudioCtx();
+  if (!ctx) return;
+  try {
+    const src = ctx.createMediaStreamSource(stream);
+    const an = ctx.createAnalyser();
+    an.fftSize = 512;
+    src.connect(an);
+    peer.analyser = an;
+    peer.dataArray = new Uint8Array(an.frequencyBinCount);
+  } catch (err) {
+    console.warn('remote analyser failed', err);
+  }
+}
+
+function startSpeakingDetection() {
+  const ctx = ensureAudioCtx();
+  if (ctx && voiceLocalStream) {
+    try {
+      const src = ctx.createMediaStreamSource(voiceLocalStream);
+      const an = ctx.createAnalyser();
+      an.fftSize = 512;
+      src.connect(an);
+      voiceLocalAnalyser = {
+        analyser: an,
+        dataArray: new Uint8Array(an.frequencyBinCount),
+        speaking: false
+      };
+    } catch (err) {
+      console.warn('local analyser failed', err);
+    }
+  }
+  if (!voiceRafId) loopSpeakingDetect();
+}
+
+function stopSpeakingDetection() {
+  if (voiceRafId) cancelAnimationFrame(voiceRafId);
+  voiceRafId = null;
+  voiceLocalAnalyser = null;
+}
+
+function loopSpeakingDetect() {
+  voiceRafId = requestAnimationFrame(loopSpeakingDetect);
+
+  if (voiceLocalAnalyser) {
+    const lvl = computeRms(voiceLocalAnalyser.analyser, voiceLocalAnalyser.dataArray);
+    const speaking = !voiceMuted && lvl > SPEAK_THRESHOLD;
+    if (speaking !== voiceLocalAnalyser.speaking) {
+      voiceLocalAnalyser.speaking = speaking;
+      applySeatSpeaking(myId, speaking);
+    }
+  }
+
+  for (const peerId of Object.keys(voicePeers)) {
+    const p = voicePeers[peerId];
+    if (!p.analyser) continue;
+    const lvl = computeRms(p.analyser, p.dataArray);
+    const speaking = lvl > SPEAK_THRESHOLD;
+    if (speaking !== p.speaking) {
+      p.speaking = speaking;
+      applySeatSpeaking(peerId, speaking);
+    }
+  }
+}
+
+function computeRms(analyser, dataArray) {
+  analyser.getByteTimeDomainData(dataArray);
+  let sum = 0;
+  for (let i = 0; i < dataArray.length; i++) {
+    const v = (dataArray[i] - 128) / 128;
+    sum += v * v;
+  }
+  return Math.sqrt(sum / dataArray.length);
+}
+
+function applySeatSpeaking(peerId, speaking) {
+  if (!peerId) return;
+  const sel = `[data-pid="${peerId.replace(/"/g, '\\"')}"]`;
+  document.querySelectorAll(sel).forEach(el => {
+    el.classList.toggle('speaking', speaking);
+  });
+}
+
+function updateVoiceButton() {
+  const btns = document.querySelectorAll('.btn-voice');
+  const muteBtns = document.querySelectorAll('.btn-voice-mute');
+  btns.forEach(b => {
+    b.classList.toggle('voice-on', voiceEnabled);
+    const icon = b.querySelector('.voice-btn-icon');
+    const text = b.querySelector('.voice-btn-text');
+    if (icon) icon.textContent = voiceEnabled ? '📞' : '🎤';
+    if (text) text.textContent = voiceEnabled ? t('voiceLeave') : t('voiceJoin');
+  });
+  muteBtns.forEach(b => {
+    b.style.display = voiceEnabled ? 'inline-flex' : 'none';
+    b.classList.toggle('is-muted', voiceMuted);
+    const icon = b.querySelector('.voice-btn-icon');
+    if (icon) icon.textContent = voiceMuted ? '🔇' : '🎙️';
+    b.title = voiceMuted ? t('voiceUnmute') : t('voiceMute');
+  });
+}
+
+// Stop voice if connection drops
+socket.on('disconnect', () => {
+  if (voiceEnabled) stopVoice();
 });
