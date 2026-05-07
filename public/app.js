@@ -1116,6 +1116,36 @@ function renderLog(log) {
   list.scrollTop = list.scrollHeight;
 }
 
+async function openDownloadLogPicker() {
+  let files = [];
+  try {
+    const res = await fetch('/api/logs');
+    const data = await res.json();
+    files = data.files || [];
+  } catch (e) {
+    showModal(t('logFetchError'));
+    return;
+  }
+  if (files.length === 0) {
+    showModal(t('logEmpty'));
+    return;
+  }
+  const overlay = document.getElementById('app-modal');
+  const msgEl = document.getElementById('app-modal-msg');
+  const btnsEl = document.getElementById('app-modal-btns');
+  const listHtml = files.map(f => {
+    const sizeKb = (f.size / 1024).toFixed(1);
+    return `<a class="log-pick-item" href="/api/logs/${encodeURIComponent(f.name)}" download="${esc(f.name)}">
+      <span class="log-pick-name">${esc(f.name)}</span>
+      <span class="log-pick-size">${sizeKb} KB</span>
+    </a>`;
+  }).join('');
+  msgEl.innerHTML = `<div class="log-pick-title">${t('logPickTitle')}</div><div class="log-pick-list">${listHtml}</div>`;
+  btnsEl.innerHTML = `<button class="btn-modal-ok" id="modal-ok">${t('ok')}</button>`;
+  overlay.style.display = 'flex';
+  document.getElementById('modal-ok').onclick = () => { overlay.style.display = 'none'; };
+}
+
 // ============================================
 // SIDEBAR
 // ============================================

@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Poker LAN</title>
-    <link rel="stylesheet" href="style.css?v=3.5" />
+    <link rel="stylesheet" href="style.css?v=3.7" />
   </head>
   <body>
 
@@ -499,6 +499,9 @@
 
         <!-- Tab: Log -->
         <div id="sidebar-log" class="sidebar-panel">
+          <div class="log-toolbar">
+            <button class="btn-download-log" onclick="openDownloadLogPicker()" data-i18n="downloadLog">&#11015; Tải log</button>
+          </div>
           <div id="action-log-list" class="action-log-list"></div>
         </div>
       </div>
@@ -582,9 +585,9 @@
       </div>
     </div>
 
-    <script src="/socket.io/socket.io.js?v=3.6"></script>
-    <script src="i18n.js?v=3.6"></script>
-    <script src="sounds.js?v=3.6"></script>
-    <script src="app.js?v=3.6"></script>
+    <script src="/socket.io/socket.io.js?v=3.7"></script>
+    <script src="i18n.js?v=3.7"></script>
+    <script src="sounds.js?v=3.7"></script>
+    <script src="app.js?v=3.7"></script>
   </body>
 </html>

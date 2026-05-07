@@ -30,6 +30,32 @@ const io = new Server(server);
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Log files API
+app.get('/api/logs', (req, res) => {
+  try {
+    const files = fs.readdirSync(LOG_DIR)
+      .filter(f => /^game-\d{4}-\d{2}-\d{2}\.log$/.test(f))
+      .map(f => {
+        const stat = fs.statSync(path.join(LOG_DIR, f));
+        return { name: f, size: stat.size, mtime: stat.mtimeMs };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    res.json({ files });
+  } catch (e) {
+    res.status(500).json({ error: 'Cannot read logs' });
+  }
+});
+
+app.get('/api/logs/:name', (req, res) => {
+  const name = req.params.name;
+  if (!/^game-\d{4}-\d{2}-\d{2}\.log$/.test(name)) {
+    return res.status(400).send('Invalid log name');
+  }
+  const file = path.join(LOG_DIR, name);
+  if (!fs.existsSync(file)) return res.status(404).send('Log not found');
+  res.download(file, name);
+});
+
 // ============================================
 // DATA
 // ============================================
