@@ -129,53 +129,79 @@ async function bootstrapLogin() {
     localStorage.removeItem(SESSION_KEY);
   }
 
-  // Show Telegram login widget
-  showLoginWidget(cfg.botUsername);
+  // Show QR login
+  showQrLogin();
 }
 
-function showLoginWidget(botUsername) {
+let qrPollTimer = null;
+
+async function showQrLogin() {
+  if (qrPollTimer) { clearInterval(qrPollTimer); qrPollTimer = null; }
+
+  let sess;
+  try {
+    const r = await fetch('/api/auth/qr-session', { method: 'POST' });
+    if (!r.ok) throw new Error('qr-session failed');
+    sess = await r.json();
+  } catch (e) {
+    showLoginError(t('loginConfigError'));
+    return;
+  }
+
   const widget = document.getElementById('login-widget');
-  widget.innerHTML = '';
-  const script = document.createElement('script');
-  script.async = true;
-  script.src = 'https://telegram.org/js/telegram-widget.js?22';
-  script.setAttribute('data-telegram-login', botUsername);
-  script.setAttribute('data-size', 'large');
-  script.setAttribute('data-radius', '10');
-  script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-  script.setAttribute('data-request-access', 'write');
-  script.onerror = () => showLoginError(t('loginWidgetError'));
-  widget.appendChild(script);
+  widget.innerHTML = `
+    <div class="qr-container">
+      <div id="qr-canvas" class="qr-canvas"></div>
+      <a href="${sess.deepLink}" target="_blank" rel="noopener" class="qr-link">
+        <span class="qr-link-icon">✈</span> ${t('qrOpenInTelegram')}
+      </a>
+      <div class="qr-hint">${t('qrHint')}</div>
+      <div class="qr-status"><span class="qr-dot"></span>${t('qrWaiting')}</div>
+    </div>
+  `;
   document.getElementById('login-status').style.display = 'none';
+
+  // Render QR (qrcode-generator global from CDN)
+  try {
+    const qr = qrcode(0, 'L');
+    qr.addData(sess.deepLink);
+    qr.make();
+    document.getElementById('qr-canvas').innerHTML = qr.createSvgTag({ scalable: true, margin: 0 });
+  } catch (e) {
+    document.getElementById('qr-canvas').textContent = '⚠ QR render failed';
+  }
+
+  // Poll status
+  qrPollTimer = setInterval(async () => {
+    try {
+      const r = await fetch('/api/auth/qr-status/' + encodeURIComponent(sess.authCode));
+      if (r.status === 404) {
+        clearInterval(qrPollTimer);
+        qrPollTimer = null;
+        showQrLogin(); // session expired → regenerate
+        return;
+      }
+      if (!r.ok) return;
+      const data = await r.json();
+      if (data.ready && data.token) {
+        clearInterval(qrPollTimer);
+        qrPollTimer = null;
+        localStorage.setItem(SESSION_KEY, data.token);
+        onLoggedIn(data.token, data.user, false);
+      }
+    } catch (e) { /* keep polling */ }
+  }, 2000);
 }
 
 function showLoginError(msg) {
+  if (qrPollTimer) { clearInterval(qrPollTimer); qrPollTimer = null; }
   document.getElementById('login-status').style.display = 'none';
+  const widget = document.getElementById('login-widget');
+  if (widget) widget.innerHTML = '';
   const el = document.getElementById('login-error');
   el.textContent = msg;
   el.style.display = 'block';
 }
-
-window.onTelegramAuth = async function (tgData) {
-  document.getElementById('login-status').textContent = t('loginVerifying');
-  document.getElementById('login-status').style.display = 'block';
-  try {
-    const res = await fetch('/api/auth/telegram', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(tgData)
-    });
-    if (!res.ok) {
-      showLoginError(t('loginAuthFailed'));
-      return;
-    }
-    const { token, user } = await res.json();
-    localStorage.setItem(SESSION_KEY, token);
-    onLoggedIn(token, user, false);
-  } catch (e) {
-    showLoginError(t('loginAuthFailed'));
-  }
-};
 
 function onLoggedIn(token, user, skipProfileScreen) {
   sessionToken = token;

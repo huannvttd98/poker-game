@@ -111,6 +111,120 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ ok: true });
 });
 
+// ============================================
+// QR LOGIN (via bot /start)
+// ============================================
+const QR_TTL = 5 * 60 * 1000; // 5 minutes
+const qrSessions = new Map(); // authCode -> { createdAt, status, token?, user? }
+
+function cleanupQrSessions() {
+  const cutoff = Date.now() - QR_TTL;
+  for (const [code, s] of qrSessions) {
+    if (s.createdAt < cutoff) qrSessions.delete(code);
+  }
+}
+setInterval(cleanupQrSessions, 60 * 1000);
+
+app.post('/api/auth/qr-session', (req, res) => {
+  if (!BOT_TOKEN || !BOT_USERNAME) {
+    return res.status(503).json({ error: 'Telegram not configured' });
+  }
+  const authCode = crypto.randomBytes(12).toString('hex');
+  qrSessions.set(authCode, { createdAt: Date.now(), status: 'pending' });
+  res.json({
+    authCode,
+    botUsername: BOT_USERNAME,
+    deepLink: `https://t.me/${BOT_USERNAME}?start=AUTH_${authCode}`
+  });
+});
+
+app.get('/api/auth/qr-status/:authCode', (req, res) => {
+  const code = req.params.authCode;
+  const s = qrSessions.get(code);
+  if (!s) return res.status(404).json({ error: 'Session expired' });
+  if (s.status === 'ready') {
+    qrSessions.delete(code); // one-shot
+    return res.json({ ready: true, token: s.token, user: s.user });
+  }
+  res.json({ ready: false });
+});
+
+// ============================================
+// TELEGRAM BOT LONG-POLLING
+// ============================================
+let tgUpdateOffset = 0;
+
+async function tgReply(chatId, text) {
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text })
+    });
+  } catch (e) { /* ignore */ }
+}
+
+async function handleTelegramUpdate(upd) {
+  const msg = upd.message;
+  if (!msg || !msg.text || !msg.from) return;
+  const match = msg.text.match(/^\/start\s+AUTH_([a-f0-9]+)/);
+  if (!match) return;
+  const authCode = match[1];
+  const s = qrSessions.get(authCode);
+  if (!s) {
+    await tgReply(msg.chat.id, '❌ Phien dang nhap khong ton tai hoac da het han.');
+    return;
+  }
+  if (s.status === 'ready') return;
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const user = {
+    tgId: msg.from.id,
+    firstName: msg.from.first_name || 'Player',
+    username: msg.from.username || '',
+    photoUrl: '',
+    createdAt: Date.now()
+  };
+  sessions.set(token, user);
+  s.status = 'ready';
+  s.token = token;
+  s.user = user;
+
+  await tgReply(msg.chat.id, `✅ Dang nhap thanh cong, ${user.firstName}! Quay lai trang web de choi.`);
+  console.log(`[QR Login] ${user.firstName} (tg:${user.tgId}) via auth ${authCode}`);
+}
+
+async function pollTelegramUpdates() {
+  if (!BOT_TOKEN) {
+    console.log('[Telegram] BOT_TOKEN not set, skipping update polling');
+    return;
+  }
+  console.log('[Telegram] Started getUpdates long-polling');
+  while (true) {
+    try {
+      const url = `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${tgUpdateOffset}&timeout=25`;
+      const r = await fetch(url);
+      const data = await r.json();
+      if (data.ok && Array.isArray(data.result)) {
+        for (const upd of data.result) {
+          tgUpdateOffset = upd.update_id + 1;
+          handleTelegramUpdate(upd).catch(e => console.error('[TG handle error]', e));
+        }
+      } else if (!data.ok) {
+        console.error('[TG getUpdates]', data.description || 'unknown error');
+        await new Promise(r => setTimeout(r, 5000));
+      }
+    } catch (e) {
+      console.error('[TG poll error]', e.message);
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
+}
+
+if (BOT_TOKEN) {
+  pollTelegramUpdates();
+}
+
 // Log files API
 app.get('/api/logs', (req, res) => {
   try {
