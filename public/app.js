@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io({ autoConnect: false });
 
 let myId = null;
 let myRoomId = null;
@@ -6,6 +6,11 @@ let currentRoom = null;
 let currentGame = null;
 let isReady = false;
 let isSpectator = false;
+
+// Telegram session
+const SESSION_KEY = 'tgSession';
+let sessionToken = null;
+let sessionUser = null;
 
 // Player profile
 let myProfile = {
@@ -93,6 +98,135 @@ applyI18n();
 document.getElementById('btn-sound').innerHTML = SFX.enabled ? '&#128264;' : '&#128263;';
 
 // ============================================
+// TELEGRAM LOGIN BOOTSTRAP
+// ============================================
+async function bootstrapLogin() {
+  let cfg;
+  try {
+    cfg = await fetch('/api/auth/config').then(r => r.json());
+  } catch (e) {
+    showLoginError(t('loginConfigError'));
+    return;
+  }
+  if (!cfg.enabled) {
+    showLoginError(t('loginNotConfigured'));
+    return;
+  }
+
+  // Try restore from localStorage
+  const savedToken = localStorage.getItem(SESSION_KEY);
+  if (savedToken) {
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { Authorization: 'Bearer ' + savedToken }
+      });
+      if (res.ok) {
+        const { user } = await res.json();
+        onLoggedIn(savedToken, user, /*skipProfile*/ true);
+        return;
+      }
+    } catch (e) { /* fall through to widget */ }
+    localStorage.removeItem(SESSION_KEY);
+  }
+
+  // Show Telegram login widget
+  showLoginWidget(cfg.botUsername);
+}
+
+function showLoginWidget(botUsername) {
+  const widget = document.getElementById('login-widget');
+  widget.innerHTML = '';
+  const script = document.createElement('script');
+  script.async = true;
+  script.src = 'https://telegram.org/js/telegram-widget.js?22';
+  script.setAttribute('data-telegram-login', botUsername);
+  script.setAttribute('data-size', 'large');
+  script.setAttribute('data-radius', '10');
+  script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+  script.setAttribute('data-request-access', 'write');
+  script.onerror = () => showLoginError(t('loginWidgetError'));
+  widget.appendChild(script);
+  document.getElementById('login-status').style.display = 'none';
+}
+
+function showLoginError(msg) {
+  document.getElementById('login-status').style.display = 'none';
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+window.onTelegramAuth = async function (tgData) {
+  document.getElementById('login-status').textContent = t('loginVerifying');
+  document.getElementById('login-status').style.display = 'block';
+  try {
+    const res = await fetch('/api/auth/telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tgData)
+    });
+    if (!res.ok) {
+      showLoginError(t('loginAuthFailed'));
+      return;
+    }
+    const { token, user } = await res.json();
+    localStorage.setItem(SESSION_KEY, token);
+    onLoggedIn(token, user, false);
+  } catch (e) {
+    showLoginError(t('loginAuthFailed'));
+  }
+};
+
+function onLoggedIn(token, user, skipProfileScreen) {
+  sessionToken = token;
+  sessionUser = user;
+  myProfile.name = user.firstName || 'Player';
+
+  // Connect socket with auth token
+  socket.auth = { token };
+  if (!socket.connected) socket.connect();
+
+  // Show profile screen so user picks avatar / adjusts display name
+  const banner = document.getElementById('login-user-banner');
+  if (banner) {
+    const tg = user.username ? ' @' + esc(user.username) : '';
+    banner.innerHTML = `<span class="login-banner-icon">✓</span> ${t('loggedInAs')}: <b>${esc(user.firstName)}</b>${tg}`;
+    banner.style.display = 'flex';
+  }
+  document.getElementById('player-name').value = user.firstName || '';
+  showScreen('profile-screen');
+}
+
+async function logoutTelegram() {
+  if (sessionToken) {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + sessionToken }
+      });
+    } catch (e) { /* ignore */ }
+  }
+  localStorage.removeItem(SESSION_KEY);
+  sessionToken = null;
+  sessionUser = null;
+  myProfile.name = '';
+  if (socket.connected) socket.disconnect();
+  location.reload();
+}
+
+socket.on('connect_error', (err) => {
+  const msg = (err && err.message) || '';
+  if (msg.includes('Invalid') || msg.includes('expired') || msg.includes('No auth')) {
+    localStorage.removeItem(SESSION_KEY);
+    sessionToken = null;
+    // Reload to show login again
+    location.reload();
+  }
+});
+
+bootstrapLogin();
+
+// ============================================
 // LOBBY
 // ============================================
 function toggleRoomSettings() {
@@ -127,6 +261,7 @@ function createRoom() {
     if (res.error) return showModal(res.error);
     myId = res.playerId;
     myRoomId = res.roomId;
+    clearChat();
     showScreen('room-screen');
   });
 }
@@ -138,6 +273,7 @@ function joinRoom() {
     if (res.error) return showModal(res.error);
     myId = res.playerId;
     myRoomId = res.roomId;
+    clearChat();
     if (res.spectator) {
       isSpectator = true;
       showScreen('game-screen');
@@ -161,6 +297,7 @@ async function exitGame() {
   isSpectator = false;
   stopTimer();
   closeResult();
+  clearChat();
   showScreen('lobby-screen');
 }
 
@@ -172,6 +309,7 @@ function leaveRoom() {
   currentGame = null;
   isReady = false;
   isSpectator = false;
+  clearChat();
   showScreen('lobby-screen');
 }
 
@@ -225,6 +363,7 @@ function quickJoin(roomId) {
     if (res.error) return showModal(res.error);
     myId = res.playerId;
     myRoomId = res.roomId;
+    clearChat();
     if (res.spectator) {
       isSpectator = true;
       showScreen('game-screen');
@@ -1182,14 +1321,21 @@ function switchSidebarTab(tab, btn) {
 // ============================================
 let unreadChat = 0;
 
-function sendChat() {
-  const input = document.getElementById('chat-input');
+function sendChat(inputId) {
+  const input = document.getElementById(inputId || 'chat-input');
+  if (!input) return;
   const text = input.value.trim();
   if (!text) return;
   socket.emit('chatMessage', text, (res) => {
     if (res?.error) console.error(res.error);
   });
   input.value = '';
+}
+
+function clearChat() {
+  document.querySelectorAll('.chat-messages').forEach(el => { el.innerHTML = ''; });
+  unreadChat = 0;
+  updateChatBadge();
 }
 
 function isChatVisible() {
@@ -1238,23 +1384,27 @@ function updateChatBadge() {
 }
 
 socket.on('chatMessage', (msg) => {
-  const list = document.getElementById('chat-messages');
-  if (!list) return;
+  const lists = document.querySelectorAll('.chat-messages');
+  if (lists.length === 0) return;
 
   const isMe = msg.playerId === myId;
-  const div = document.createElement('div');
-  div.className = 'chat-msg' + (isMe ? ' chat-msg-me' : '');
-  div.innerHTML =
-    `<span class="chat-avatar">${msg.avatar}</span>` +
-    `<div class="chat-bubble">` +
-      `<span class="chat-name">${esc(msg.name)}</span>` +
-      `<span class="chat-text">${esc(msg.text)}</span>` +
-    `</div>`;
-  list.appendChild(div);
-  list.scrollTop = list.scrollHeight;
+  lists.forEach(list => {
+    const div = document.createElement('div');
+    div.className = 'chat-msg' + (isMe ? ' chat-msg-me' : '');
+    div.innerHTML =
+      `<span class="chat-avatar">${msg.avatar}</span>` +
+      `<div class="chat-bubble">` +
+        `<span class="chat-name">${esc(msg.name)}</span>` +
+        `<span class="chat-text">${esc(msg.text)}</span>` +
+      `</div>`;
+    list.appendChild(div);
+    list.scrollTop = list.scrollHeight;
+  });
 
   if (!isMe) SFX.chatMsg();
-  if (!isChatVisible()) {
+  // Badge/toast only for game-screen sidebar chat (room-screen always visible)
+  const onRoomScreen = document.getElementById('room-screen')?.classList.contains('active');
+  if (!onRoomScreen && !isChatVisible()) {
     unreadChat++;
     updateChatBadge();
     if (!isMe) showChatToast(msg);
@@ -1301,9 +1451,10 @@ function showChatToast(msg) {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && document.activeElement === document.getElementById('chat-input')) {
-    sendChat();
-  }
+  if (e.key !== 'Enter') return;
+  const active = document.activeElement;
+  if (active === document.getElementById('chat-input')) sendChat();
+  else if (active === document.getElementById('room-chat-input')) sendChat('room-chat-input');
 });
 
 // ============================================

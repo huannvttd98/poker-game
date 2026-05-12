@@ -403,6 +403,86 @@ button:active {
 }
 
 /* ============================================
+   LOGIN SCREEN (Telegram)
+   ============================================ */
+#login-screen {
+  flex-direction: column;
+  overflow-y: auto;
+}
+.login-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  padding: 28px 20px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(8px);
+}
+.login-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.login-subtitle {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+}
+.login-status {
+  font-size: 0.85rem;
+  color: var(--muted);
+  padding: 8px 0;
+}
+.login-widget {
+  min-height: 40px;
+  display: flex;
+  justify-content: center;
+}
+.login-error {
+  background: rgba(255, 77, 106, 0.1);
+  border: 1px solid rgba(255, 77, 106, 0.3);
+  color: var(--red);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  text-align: center;
+  line-height: 1.5;
+}
+.login-user-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  color: var(--green);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  width: 100%;
+}
+.login-banner-icon {
+  font-weight: 700;
+}
+.btn-logout {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--glass-border);
+  padding: 10px;
+  font-size: 0.85rem;
+  width: 100%;
+  border-radius: var(--radius);
+}
+.btn-logout:hover {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+/* ============================================
    PROFILE SCREEN
    ============================================ */
 #profile-screen {
@@ -812,6 +892,26 @@ button:active {
   flex: 1;
   align-content: center;
   overflow-y: auto;
+  min-height: 80px;
+}
+.room-chat {
+  display: flex;
+  flex-direction: column;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  margin: 10px 0;
+  max-height: 220px;
+  min-height: 120px;
+  overflow: hidden;
+}
+.room-chat .chat-messages {
+  flex: 1;
+  min-height: 0;
+}
+.room-chat .chat-bubble { max-width: 70%; }
+@media (max-width: 768px) {
+  .room-chat { max-height: 160px; min-height: 100px; }
 }
 .player-card {
   background: var(--glass);

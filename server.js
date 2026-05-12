@@ -27,8 +27,89 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+app.use(express.json());
+
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ============================================
+// TELEGRAM AUTH
+// ============================================
+const BOT_TOKEN = process.env.TG_BOT_TOKEN || '';
+const BOT_USERNAME = process.env.TG_BOT_USERNAME || '';
+const AUTH_MAX_AGE = 86400; // 24h
+const SESSION_TTL = 7 * 24 * 3600 * 1000; // 7 days
+
+// sessionToken -> { tgId, firstName, username, photoUrl, createdAt }
+const sessions = new Map();
+
+function verifyTelegramAuth(data) {
+  if (!BOT_TOKEN) return false;
+  if (!data || typeof data !== 'object') return false;
+  const { hash, ...rest } = data;
+  if (!hash) return false;
+  const dataCheckString = Object.keys(rest)
+    .sort()
+    .map(k => `${k}=${rest[k]}`)
+    .join('\n');
+  const secretKey = crypto.createHash('sha256').update(BOT_TOKEN).digest();
+  const computedHash = crypto.createHmac('sha256', secretKey)
+    .update(dataCheckString)
+    .digest('hex');
+  if (computedHash !== hash) return false;
+  const now = Math.floor(Date.now() / 1000);
+  const authDate = parseInt(data.auth_date);
+  if (!authDate || now - authDate > AUTH_MAX_AGE) return false;
+  return true;
+}
+
+function cleanupSessions() {
+  const cutoff = Date.now() - SESSION_TTL;
+  for (const [token, user] of sessions) {
+    if (user.createdAt < cutoff) sessions.delete(token);
+  }
+}
+setInterval(cleanupSessions, 3600 * 1000); // hourly
+
+app.get('/api/auth/config', (req, res) => {
+  res.json({
+    enabled: !!(BOT_TOKEN && BOT_USERNAME),
+    botUsername: BOT_USERNAME
+  });
+});
+
+app.post('/api/auth/telegram', (req, res) => {
+  const data = req.body || {};
+  if (!verifyTelegramAuth(data)) {
+    return res.status(401).json({ error: 'Invalid Telegram auth' });
+  }
+  const token = crypto.randomBytes(32).toString('hex');
+  const user = {
+    tgId: data.id,
+    firstName: data.first_name || 'Player',
+    username: data.username || '',
+    photoUrl: data.photo_url || '',
+    createdAt: Date.now()
+  };
+  sessions.set(token, user);
+  res.json({ token, user });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!token) return res.status(401).json({ error: 'No token' });
+  const user = sessions.get(token);
+  if (!user) return res.status(401).json({ error: 'Invalid token' });
+  res.json({ user });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (token) sessions.delete(token);
+  res.json({ ok: true });
+});
 
 // Log files API
 app.get('/api/logs', (req, res) => {
@@ -943,8 +1024,20 @@ function broadcastRoomList() {
 // ============================================
 // SOCKET.IO
 // ============================================
+
+// Require valid Telegram session token (when auth is enabled)
+io.use((socket, next) => {
+  if (!BOT_TOKEN) return next(); // auth disabled — allow all (dev/LAN mode)
+  const token = socket.handshake.auth && socket.handshake.auth.token;
+  if (!token) return next(new Error('No auth token'));
+  const user = sessions.get(token);
+  if (!user) return next(new Error('Invalid or expired session'));
+  socket.user = user;
+  next();
+});
+
 io.on('connection', (socket) => {
-  console.log(`[Connect] ${socket.id}`);
+  console.log(`[Connect] ${socket.id}${socket.user ? ` (tg:${socket.user.tgId})` : ''}`);
 
   // Send room list on connect
   socket.emit('roomList', getRoomList());
@@ -1208,7 +1301,7 @@ function game_isPlayerTurn(game, playerId) {
 // ============================================
 // START SERVER
 // ============================================
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT) || 3000;
 
 function getLanIP() {
   const interfaces = os.networkInterfaces();

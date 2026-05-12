@@ -14,6 +14,7 @@ Thư mục này lưu lại flow và kiến trúc của dự án poker LAN real-t
 | [06-client-architecture.md](06-client-architecture.md) | UI screens, render functions, user interactions |
 | [07-pot-distribution.md](07-pot-distribution.md) | Logic chia pot, side pots, luật odd-chip |
 | [08-logging.md](08-logging.md) | File log format, các event được log |
+| [09-telegram-auth.md](09-telegram-auth.md) | Cấu hình đăng nhập Telegram (bot, domain, env vars) |
 
 ## Quy ước
 
