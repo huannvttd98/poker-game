@@ -823,17 +823,18 @@ function calculateSidePots(game) {
 function finishHand(room) {
   const game = room.game;
   const winner = game.players.find(p => !p.folded);
+  const potAmount = game.pot;
 
-  // Transfer pot
-  const roomPlayer = room.players.find(p => p.id === winner.id);
-  if (roomPlayer) roomPlayer.chips += game.pot;
-  winner.chips += game.pot;
+  // Transfer pot — only mutate game.players; syncChips propagates to room.players.
+  winner.chips += potAmount;
 
   const result = {
-    winners: [{ playerId: winner.id, name: winner.name, amount: game.pot }],
+    winners: [{ playerId: winner.id, name: winner.name, amount: potAmount }],
     reason: 'others_folded'
   };
 
+  game.pot = 0;
+  game.sidePots = [];
   game.stage = 'finished';
   game.result = result;
   game.actionLog.push({ action: 'result', winners: result.winners });
@@ -861,7 +862,7 @@ function showdown(room) {
   }
 
   if (game.sidePots.length > 0) {
-    // Distribute side pots
+    // Distribute side pots — mutate game.players only; syncChips propagates to room.players.
     for (const pot of game.sidePots) {
       const eligibleResults = handResults.filter(r => pot.eligible.includes(r.playerId));
       const winners = determineWinners(eligibleResults);
@@ -870,10 +871,9 @@ function showdown(room) {
       const shares = splitPot(pot.amount, winners, game);
       for (const { winner: w, share } of shares) {
         const gp = game.players.find(p => p.id === w.playerId);
-        const rp = room.players.find(p => p.id === w.playerId);
-        if (gp) gp.chips += share;
-        if (rp) rp.chips += share;
-        result.winners.push({ playerId: w.playerId, name: gp?.name || rp?.name || '', amount: share, hand: result.hands[w.playerId], bestCards: bestCardsMap[w.playerId], uncalled });
+        if (!gp) continue;
+        gp.chips += share;
+        result.winners.push({ playerId: w.playerId, name: gp.name, amount: share, hand: result.hands[w.playerId], bestCards: bestCardsMap[w.playerId], uncalled });
       }
     }
   } else {
@@ -882,13 +882,14 @@ function showdown(room) {
     const shares = splitPot(game.pot, winners, game);
     for (const { winner: w, share } of shares) {
       const gp = game.players.find(p => p.id === w.playerId);
-      const rp = room.players.find(p => p.id === w.playerId);
-      if (gp) gp.chips += share;
-      if (rp) rp.chips += share;
-      result.winners.push({ playerId: w.playerId, name: gp?.name || rp?.name || '', amount: share, hand: result.hands[w.playerId], bestCards: bestCardsMap[w.playerId] });
+      if (!gp) continue;
+      gp.chips += share;
+      result.winners.push({ playerId: w.playerId, name: gp.name, amount: share, hand: result.hands[w.playerId], bestCards: bestCardsMap[w.playerId] });
     }
   }
 
+  game.pot = 0;
+  game.sidePots = [];
   game.result = result;
   game.actionLog.push({ action: 'result', winners: mergeWinners(result.winners) });
   room.status = 'waiting';
